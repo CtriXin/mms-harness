@@ -19,6 +19,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 | O1 | C01/C02 | `mms/adapter/test_config.py` | 12 项全过：凭据缺失、bundle 审批和 hash、能力与协议、隔离环境 | 不发真实请求 |
 | O2 | C03/C02 | `test_plugin.mjs` + `test_observe.mjs`，插件取**当前源码**，依赖取固定版本 runtime | 3 项全过：Recipe 能力要求 fail closed，evidence 不记 prompt 和 key | 不走真实 UI |
 | O3 | C14.01/.02、C12 | vitest 跑 fork 改过的三个 client 包 | 全过（2026-09-18 为 12 个文件、182 项） | 只测组件，不测和 host 的连接 |
+| O6 | C07.02 | `mms/adapter/test_remote.mjs`：真实 socket + 替身 DSH | 9 项全过：无口令 / 非法 Host / 跨源 / 旧口令被拒且不到达 DSH；WebSocket 需要 cookie；DSH cookie 不外泄；只有 manifest 和 icon 不需要口令 | 不测真实手机，也不测 LAN 绑定（绑定见 `REMOTE.md` 端到端记录） |
 | O4 | — | 当前 HEAD 对 `upstream/master` merge-base 的 diff，逐文件对照 `UPSTREAM-PATCHES.md` | 改到的上游文件全部已登记 | 不判断改动内容对不对 |
 | O5 | — | `--build`：`DSH_CLIENT_TITLE="MMS Harness" pnpm run build` | 退出码 0 | — |
 | L0 | C10 | `mms/install.py` 把当前 build 装进临时目录（runtime 从 `--runtime-from` 复制并核对 lock） | 安装成功 | 不覆盖、也不测已安装的 3092 实例 |
