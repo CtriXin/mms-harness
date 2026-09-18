@@ -1,6 +1,6 @@
 # MMS 全量迁移的证据索引
 
-快照时间：2026-09-18T15:30:38+08:00。本页是 [总任务](MIGRATION.md) 的证据说明；能力状态只在总任务维护。R/P/T 是本清单的证据分级，与旧审计的迁移分类字母无关。
+快照时间：2026-09-18T16:00:02+08:00。本页是 [总任务](MIGRATION.md) 的证据说明；能力状态只在总任务维护。R/P/T 是本清单的证据分级，与旧审计的迁移分类字母无关。
 
 本机证据根目录：`/Users/xin/.local/share/stride/tasks/`。下列路径相对此目录；同机 agent 可直接读取。GitHub 读者无法读取本机报告，应将 R 当作“已阅读历史记录”，不能当作可独立重现的日志附件。没有把凭据、原始模型请求或私有服务地址发布进仓库。
 
@@ -159,7 +159,7 @@ BTW 报告先有 UI/mock，后补 route-backed 回答与实际 MiniMax 通道；
 
 公开 PR：[#278](https://github.com/CtriXin/multi-model-switch/pull/278)、[#302](https://github.com/CtriXin/multi-model-switch/pull/302)、[#306](https://github.com/CtriXin/multi-model-switch/pull/306)、[#310](https://github.com/CtriXin/multi-model-switch/pull/310)、[#331](https://github.com/CtriXin/multi-model-switch/pull/331)。
 
-固定版本实录：[docs/mms-web/design/t5d/SUMMARY.md](https://github.com/CtriXin/multi-model-switch/blob/9c2299a2b94da7ac9c903c340a7641e90345b92e/docs/mms-web/design/t5d/SUMMARY.md)。
+固定版本实录：[docs/mms-web/design/t5d/SUMMARY.md](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/docs/mms-web/design/t5d/SUMMARY.md)。
 
 - 本机 `8b76aee15b3c41f7/workspace/.stride-output/dsh-audit/prs/278/metadata.json`；SHA-256 `69442f15436f225e6f46c542371d8f65822eaf9bfaf2ba0f8a5ade933ed6550a`。
 - 本机 `8b76aee15b3c41f7/workspace/.stride-output/dsh-audit/prs/302/metadata.json`；SHA-256 `16da8be23213a3cacad99135e9713b62d778632916cca9cdfbd2690c3bb8ecdd`。
@@ -201,11 +201,45 @@ BTW 报告先有 UI/mock，后补 route-backed 回答与实际 MiniMax 通道；
 <a id="e19"></a>
 ## E19 · 全部 PR 与 commit 的来源清点
 
-旧审计 198 PR、702 unique commits、221 merges、51 direct/unattributed（其中 9 个也是 merge；新 CSV 将 merge 与非 merge 分开计数）；本轮 GitHub 回读更新到 203 PR，按固定 main/dev 联集列出 720 commits/226 merges。检查每个 PR 有 C 组归属和每个 source/test 路径存在。
+旧审计 198 PR、702 unique commits、221 merges、51 direct/unattributed；本轮 GitHub 回读更新到 203 PR，按固定 main/dev 联集列出 758 commits/239 merges。检查每个 PR 有 C 组归属和每个 source/test 路径存在。
 
 **边界：** 归属表和路径存在不等于代码审查、冲突重演或当前版重跑。旧审计的 plugin-only/不 fork 建议已失效；这里只继承事实索引，不继承该建议。
 
 - 本机 `8b76aee15b3c41f7/workspace/docs/dsh-migration-audit/inventory.json`；SHA-256 `a01f91b052998a5ef19862cee303e91c9f0be03146e059e1a2c9bf5709006fe3`。
-- 本机 `b5f588a91c604408/workspace/.stride-output/migration-all-current-prs.json`；SHA-256 `89ca5e5bd5005e76bf6f6848b9d7c11bfe6a583c517d76327dd5089909f3a663`。
+- 本机 `b5f588a91c604408/workspace/.stride-output/review-live-prs.json`；SHA-256 `f0a4f5fb8c1d14c86b6ccfa35d35fd7ec3a4640c97b2766eee70e51f653697be`。
 - 本机 `b5f588a91c604408/workspace/.stride-output/migration-current-pr-detail.json`；SHA-256 `28e225b99a346e28ee77a71b7d636f965ff1fdec238b3b3ed61d6c69081e6b17`。
 - 本机 `b5f588a91c604408/workspace/.stride-output/migration-pr-347.json`；SHA-256 `7b2b02b0e71b56a65ce8491ac2d5a75c9f7cf8f5df5ec49d6b66e95e4d39bb06`。
+
+<a id="e20"></a>
+## E20 · 用户转交的 Fable 独立核对
+
+原文提出契约型漏项、19个具体建议项及新版本合并状态。本轮逐项按source核对，处理结果独立保存在 MIGRATION-REVIEW-fable.md。
+
+**边界：** 这是用户提供的独立意见，不是本 agent 发起的审查。80%为评审者估计，不作为度量。原文Codex root路径与中间CI样本需按当前source修正。
+
+- 本机 `b5f588a91c604408/workspace/.stride-output/review-fable-original.txt`；SHA-256 `3ae732ee365b68f7aea63d8cf589a0a225cbbca4f106d3530699c0626fd439c1`。
+
+<a id="e21"></a>
+## E21 · guardrails / FEATURES / preferences 与实际消费者
+
+本轮逐节/逐行读取文档，检查当前 lib/mms_pi_support.py、lib/mms_core.py、lib/mms_launchers.py、vision relay、session_actions.py、Composer/App/files/skills/drafts 和关键测试断言；覆盖映射在 MIGRATION-CONTRACT-COVERAGE.md。
+
+**边界：** 本轮为source inspection，没有重跑这些产品测试，新补项原则标 T。文档存在旧配置根、未发布/未安装/不可跨模型等过时段落，不能照抄；当前 resolver/tests 为 mms-next。普通文本预览64 KiB、Skills总量200000 UTF-8 bytes、图片预览8 MiB均核对到常量/消费者。
+
+- 本机 `b5f588a91c604408/workspace/.stride-output/source-contracts/AGENT_GUARDRAILS.md`；SHA-256 `bd2342117359f8a8b47b11509e2ec19943161ea2a0b1a7173201ed67be211d44`。
+- 本机 `b5f588a91c604408/workspace/.stride-output/source-contracts/FEATURES.md`；SHA-256 `c728abc2d467c0fa8e6a8554f1d7579d1ed6f4753835aa76935d090f1ab2f025`。
+- 本机 `b5f588a91c604408/workspace/.stride-output/source-contracts/MMS_USER_PREFERENCES.md`；SHA-256 `5fdf1d1eb8b874b8c50cc5c1e5ff52becc63119f5bb97ae84fd3e99312a51f54`。
+
+<a id="e22"></a>
+## E22 · T9a / Preview / onboarding 最终交付
+
+四PR已MERGED，本轮GitHub回读每PR最终8项CI全部SUCCESS。已读最终运行报告：shell installer真实copy/cleanup caller修前漏检，增强后分别红；staging/install两处flat guard mutation红；main732/dev752 fresh；Preview实际installed launcher import发现Grok漏包后补至81模块；分享zip实际解压和隔离启动。最终PR报告main2638、dev3000 tests零fail。
+
+**边界：** Fable的2636是中间候选，未覆盖后来新增的全部consumer修复。读历史执行报告及实时CI元数据不等于本轮重跑，也不意味着这批功能已迁入fork或用户安装已更新。
+
+公开 PR：[#337](https://github.com/CtriXin/multi-model-switch/pull/337)、[#343](https://github.com/CtriXin/multi-model-switch/pull/343)、[#344](https://github.com/CtriXin/multi-model-switch/pull/344)、[#347](https://github.com/CtriXin/multi-model-switch/pull/347)。
+
+- 本机 `7b37a8aff257410b/components/t9a-closeout/workspace/.ai/regression-reports/2026-09-18-t9a-closeout.md`；SHA-256 `9b3fbef4e3da52f66e80bf0db32281c0dc0e538b8888457b87cae0f0ec856974`。
+- 本机 `7b37a8aff257410b/components/t9a-dev-sync/workspace/.ai/regression-reports/2026-09-18-t9a-dev-sync.md`；SHA-256 `163df59b02c731055b93f979d6a6357d0c22281cab3d3f94f9f184276752097e`。
+- 本机 `7b37a8aff257410b/components/onboarding-closeout/workspace/.ai/regression-reports/2026-09-18-onboarding-closeout.md`；SHA-256 `c813efd5451b4846fb882ce1be7a851c4ad024f4e0a75f2f8c7d6818e3ed16e2`。
+- 本机 `b5f588a91c604408/workspace/.stride-output/review-merged-pr-details.json`；SHA-256 `14cebbc7eea2eefd70df0d41be82dad915afc4d0d1a5ab4050dc7b4c41210e91`。

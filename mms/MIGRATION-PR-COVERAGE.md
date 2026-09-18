@@ -1,12 +1,12 @@
 # MMS PR 与迁移能力对照
 
-快照：2026-09-18T15:30:38+08:00。范围从 PR #111（4.0 主实现）开始，至本次回读的 #347；覆盖 GitHub 返回的全部 203 个 PR：180 MERGED、17 CLOSED、6 OPEN。编号缺口不是遗漏 PR，GitHub 的 issue/PR 共用编号。
+编制时间：2026-09-18T16:00:02+08:00。Git/PR 回读批次：2026-09-18T15:53:51+08:00。范围从 PR #111（4.0 主实现）开始，至本次回读的 #347；覆盖 GitHub 返回的全部 203 个 PR：184 MERGED、17 CLOSED、2 OPEN。编号缺口不是遗漏 PR，GitHub 的 issue/PR 共用编号。
 
 本表负责“每个 PR 去哪里找”；[总任务](MIGRATION.md) 负责逐项勾选，[证据索引](MIGRATION-EVIDENCE.md) 负责说明验证范围。MERGED/CLOSED/OPEN 不是能力验收状态。仅有 merge 记录，不能断言不存在误合并、行为退化或冲突解决错误。
 
-固定 source：main `02da9482c26420f9fdbb5074803efc44b0475965`（4.23.7），dev `9c2299a2b94da7ac9c903c340a7641e90345b92e`（5.1.10）。[全部 commit / merge 台账](MIGRATION-HISTORY.csv) 收录两条分支自 4.0 主实现之前 base `0d342c7f99ded8939e436edb489e114d9d40db76` 起的联集：720 unique commits、226 merge 节点、42 direct/unattributed commits。每行保留 parents、main/dev 可达性、归属方法。归属不代表逐提交行为验收。旧审计的 51 条 direct/unattributed 包含 9 个未归属 merge；本 CSV 将这些归入 merge，因此非 merge 的 direct/unattributed 为 42。
+固定 source：main `56b6685543eb055baace4eeed00676bca3c82e32`（4.23.8），dev `3d4ce70fa50bd3aa05128bfbf5d659071ab07719`（5.1.11）。[全部 commit / merge 台账](MIGRATION-HISTORY.csv) 收录两条分支自 4.0 主实现之前 base `0d342c7f99ded8939e436edb489e114d9d40db76` 起的联集：758 unique commits、239 merge 节点、42 direct/unattributed commits。每行保留 parents、main/dev 可达性、归属方法。归属不代表逐提交行为验收。
 
-旧审计建议不再有效：迁移范围是全部现有能力，不因可用 plugin/preset 实现就取消迁移。#308 遵守用户明确要求：实验不合入。#295/#320 为 MERGED，不能再写成关闭未合。#341/#342 由旧表 OPEN 更新为 MERGED；#345/#346 补入已合并；#347 是新增候选。
+旧审计建议不再有效：迁移范围是全部现有能力，不因可用 plugin/preset 实现就取消迁移。#308 遵守用户明确要求：实验不合入。#295/#320 为 MERGED，不能再写成关闭未合。#341/#342 由旧表 OPEN 更新为 MERGED；#345/#346 补入已合并；#337/#343/#344/#347 已从候选移出；T9a、升级保护、完整分享包与文档交付分别落到 C10/C11/C24。
 
 | PR | 状态 / 目标 | 内容 | 能力组 |
 |---|---|---|---|
@@ -202,16 +202,18 @@
 | [#334](https://github.com/CtriXin/multi-model-switch/pull/334) | MERGED → dev | test(web): 改名/等待控制/确认步骤/Popover 接线改真执行测试 (T8i B+C) | [C12](MIGRATION.md#c12) [C13](MIGRATION.md#c13) [C23](MIGRATION.md#c23) |
 | [#335](https://github.com/CtriXin/multi-model-switch/pull/335) | MERGED → main | fix: 收尾共享门禁与文件夹真路径回归，发布 v4.23.4 | [C09](MIGRATION.md#c09) [C14](MIGRATION.md#c14) [C22](MIGRATION.md#c22) [C23](MIGRATION.md#c23) [C24](MIGRATION.md#c24) |
 | [#336](https://github.com/CtriXin/multi-model-switch/pull/336) | MERGED → dev | fix: 完成 T8i 实际接线回归与双线门禁，发布 v5.1.7 | [C12](MIGRATION.md#c12) [C14](MIGRATION.md#c14) [C16](MIGRATION.md#c16) [C22](MIGRATION.md#c22) [C23](MIGRATION.md#c23) [C24](MIGRATION.md#c24) |
-| [#337](https://github.com/CtriXin/multi-model-switch/pull/337) | OPEN → main | docs: wire AI onboarding and finish remaining archive cleanup | [C24](MIGRATION.md#c24) [C25](MIGRATION.md#c25) |
+| [#337](https://github.com/CtriXin/multi-model-switch/pull/337) | MERGED → main | docs: wire AI onboarding and finish remaining archive cleanup | [C10](MIGRATION.md#c10) [C24](MIGRATION.md#c24) |
 | [#338](https://github.com/CtriXin/multi-model-switch/pull/338) | MERGED → main | fix: 修复开启远程访问时的升级检查（v4.23.5） | [C07](MIGRATION.md#c07) [C11](MIGRATION.md#c11) |
 | [#339](https://github.com/CtriXin/multi-model-switch/pull/339) | MERGED → dev | fix: 同步远程访问开启时的升级认证修复（v5.1.8） | [C07](MIGRATION.md#c07) [C11](MIGRATION.md#c11) |
 | [#340](https://github.com/CtriXin/multi-model-switch/pull/340) | OPEN → dev | fix(settings): 移除设置滚动容器顶部 padding 并为首项增加 margin-top | [C12](MIGRATION.md#c12) [C25](MIGRATION.md#c25) |
 | [#341](https://github.com/CtriXin/multi-model-switch/pull/341) | MERGED → dev | feat(pilot): recover failed sessions with reviewed drafts (v5.1.9) | [C08](MIGRATION.md#c08) |
 | [#342](https://github.com/CtriXin/multi-model-switch/pull/342) | MERGED → main | feat(pilot): backport failed-session recovery to Stable (v4.23.6) | [C08](MIGRATION.md#c08) |
-| [#343](https://github.com/CtriXin/multi-model-switch/pull/343) | OPEN → main | docs: comprehensive README with TL;DR + collapsed details | [C24](MIGRATION.md#c24) [C25](MIGRATION.md#c25) |
-| [#344](https://github.com/CtriXin/multi-model-switch/pull/344) | OPEN → main | T9a: move 79 root Python modules into lib/ | [C09](MIGRATION.md#c09) [C10](MIGRATION.md#c10) [C11](MIGRATION.md#c11) [C22](MIGRATION.md#c22) [C24](MIGRATION.md#c24) [C25](MIGRATION.md#c25) |
+| [#343](https://github.com/CtriXin/multi-model-switch/pull/343) | MERGED → main | docs: comprehensive README with TL;DR + collapsed details | [C24](MIGRATION.md#c24) |
+| [#344](https://github.com/CtriXin/multi-model-switch/pull/344) | MERGED → main | T9a: move 79 root Python modules into lib/ | [C09](MIGRATION.md#c09) [C10](MIGRATION.md#c10) [C11](MIGRATION.md#c11) [C22](MIGRATION.md#c22) [C24](MIGRATION.md#c24) |
 | [#345](https://github.com/CtriXin/multi-model-switch/pull/345) | MERGED → main | fix(web): 保存模型设置后即时刷新新任务默认值 · v4.23.7 | [C01](MIGRATION.md#c01) [C02](MIGRATION.md#c02) [C12](MIGRATION.md#c12) |
 | [#346](https://github.com/CtriXin/multi-model-switch/pull/346) | MERGED → dev | fix(pilot): 保存默认 Effort 后即时刷新新任务（5.1.10） | [C01](MIGRATION.md#c01) [C02](MIGRATION.md#c02) [C12](MIGRATION.md#c12) |
-| [#347](https://github.com/CtriXin/multi-model-switch/pull/347) | OPEN → dev | fix(preview): synchronize T9a runtime layout and safe upgrades (5.1.11) | [C09](MIGRATION.md#c09) [C10](MIGRATION.md#c10) [C11](MIGRATION.md#c11) [C22](MIGRATION.md#c22) [C25](MIGRATION.md#c25) |
+| [#347](https://github.com/CtriXin/multi-model-switch/pull/347) | MERGED → dev | fix(preview): synchronize T9a runtime layout and safe upgrades (5.1.11) | [C09](MIGRATION.md#c09) [C10](MIGRATION.md#c10) [C11](MIGRATION.md#c11) [C22](MIGRATION.md#c22) [C24](MIGRATION.md#c24) |
 
 另一个 agent 应先独立列出能力，再用 PR / commit 台账检查漏项；尤其检查同一 PR 内不同影响面、直接提交中的 Fleet、被后续修正的交互和仍处候选的工程整理。不能用“全都分了组”代替这次语义对账。
+
+CSV 中个别源仓提交标题触发 fork 的文档词汇约束，已明确标注为转述；原始标题可由该行 commit 链接读取，源仓历史未修改。
