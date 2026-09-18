@@ -1,6 +1,6 @@
 # MMS fork ownership
 
-CtriXin/mms-harness is the requested MMS fork. Follow `mms/MIGRATION.md`; extension-only advice cannot replace migration. Preserve upstream MIT attribution and MMS imports’ Apache-2.0 license. Never publish under upstream npm names or commit user configuration/credentials.
+CtriXin/mms-harness is the requested MMS fork. Read `mms/HANDOFF.md` first for how to work here, then follow `mms/MIGRATION.md` for what to migrate; extension-only advice cannot replace migration. Preserve upstream MIT attribution and MMS imports’ Apache-2.0 license. Never publish under upstream npm names or commit user configuration/credentials.
 
 # AGENTS.md
 
