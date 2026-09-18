@@ -119,3 +119,24 @@ def test_mms_shipped_capabilities_fill_missing_metadata_but_never_override_polic
     assert 'high' in model['reasoningEfforts']
     d['payloads']['policy']['models']['gpt-5.6-sol']={'capabilities':{'vision':False}}
     assert next(iter(convert_bundle(d)['providers'].values()))['models'][0]['input']==['text']
+
+
+def test_mms_effort_preference_reaches_dsh_settings_once(tmp_path):
+    # dsh reads reasoningEffort only from the settings layer; a config value is ignored
+    # (packages/core/agent-default-model/README.md). Seed it once, never over a user choice.
+    d=payload(); d['payloads']['policy']['models']['deepseek-test']={'capabilities':{'reasoning_effort':'high'}}
+    root=bundle_dir(tmp_path,d); instance=tmp_path/'instance'
+    configure(root,instance,'deepseek-test')
+    settings=(instance/'home/settings.yaml').read_text()
+    assert 'agent-default-model:' in settings and 'reasoningEffort: "high"' in settings and 'model: "upstream-alias"' in settings
+    patch=json.loads((instance/'mms.patch.yml').read_text())
+    assert [r['config'] for r in patch if r.get('id')=='agent-default-model']==[{'provider':json.loads((instance/'routes.json').read_text())['routes'][0]['provider'],'model':'upstream-alias'}]
+    user='ui-onboarding:\n  welcomeNoticeVersion: x\nagent-default-model:\n  provider: other\n  model: picked\n  reasoningEffort: low\n'
+    (instance/'home/settings.yaml').write_text(user)
+    configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
+    assert (instance/'home/settings.yaml').read_text()==user
+    other='ui-onboarding:\n  welcomeNoticeVersion: x\n'
+    (instance/'home/settings.yaml').write_text(other)
+    configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
+    seeded=(instance/'home/settings.yaml').read_text()
+    assert seeded.startswith(other) and 'reasoningEffort: "high"' in seeded

@@ -176,6 +176,21 @@ def private_json(path: Path, value):
     temporary.replace(path)
 
 
+def seed_default_selection(path: Path, selection: dict):
+    """Give dsh the MMS default model and effort, once.
+
+    `reasoningEffort` exists only in dsh's settings layer, and the
+    agent-default-model config silently ignores it. A selection the user has
+    already saved (or a document this code cannot safely append to) is left
+    untouched.
+    """
+    text = path.read_text() if path.exists() else ''
+    if re.search(r'^agent-default-model\s*:', text, re.M) or text.lstrip().startswith(('{', '[')):
+        return
+    block = 'agent-default-model:\n' + ''.join(f'  {k}: {json.dumps(v)}\n' for k, v in selection.items())
+    path.write_text(text + ('' if not text or text.endswith('\n') else '\n') + block)
+
+
 def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plugin_path=None, previous_credentials=None):
     data = read_config(root)
     choices = [r for r in data['routes'] if r['logical_model'] == default_model and r['rank'] == 0]
@@ -196,9 +211,11 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
     metadata = {k: v for k, v in data.items() if k not in {'providers', 'credentials'}}
     private_json(instance / 'routes.json', metadata)
     default = {'provider': choice['provider'], 'model': choice['model']}
+    selection = dict(default)
     preference = data['providers'][choice['provider']].get('reasoning')
     if preference:
-        default['reasoningEffort'] = preference
+        selection['reasoningEffort'] = preference
+    seed_default_selection(dsh_home / 'settings.yaml', selection)
     patch = [
         {'id': 'llm-pi-ai', 'config': {'providers': data['providers']}},
         {'id': 'llm-deepseek', 'disabled': True},

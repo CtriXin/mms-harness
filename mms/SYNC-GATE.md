@@ -60,6 +60,11 @@ fork 只提供 **client 产物**。host 用的是 npm 上固定版本的 `@deeps
 
 合入上游源码之后，新 client 可能依赖旧 host 没有的接口。W1 和 L1–L4 就是用来抓这种不匹配的。上游发了新的 npm 版本时，要在同步分支上一起改：`DSH_VERSION`、`package-lock.json`、runtime，然后重跑整份 gate。
 
-## 本轮发现，待修
+## 已修：MMS 默认 effort 没有传到 dsh（2026-09-18）
 
-- **MMS 默认 effort 从来没有传到 dsh。** `mms/adapter/config.py:198-201` 把 `reasoningEffort` 写进了 `agent-default-model` 的 config。但上游 `packages/core/agent-default-model/README.md:46,71` 明确说它只属于 settings 层，config 里的值会被忽略。实测 config 写 `high`，实际请求是 `medium`；改为写 settings 后才是 `high`。Web 之所以看起来正常，是因为 UI 每次都在会话里显式选 effort。修法：`configure()` 在 `settings.yaml` 里还没有选择时，写入一次初始选择；用户在 UI 里保存过的选择不覆盖。修完后在 L2 里加一个「只靠 MMS 偏好」的用例。
+- **原因**：`configure()` 把 `reasoningEffort` 写进了 `agent-default-model` 的 config。但上游只认 settings 层里的这个值（`packages/core/agent-default-model/README.md:46,71`），config 里的会被直接忽略。
+- **修复**：新增 `seed_default_selection()`：`settings.yaml` 里还没有 `agent-default-model` 时，写入一次 MMS 的默认模型和 effort。用户在 UI 里保存过的选择，以及无法安全追加的 JSON 格式文档，都保持不动。config 里不再写 effort。
+- **验证**：
+  - `test_config.py` 新增 1 项：全新写入、已有选择不覆盖、已有其他 settings 时只追加。mutation：去掉写入调用后这项变红。
+  - 用真实的 mms-next 新建实例，写入的是 `deepseek-v4-flash` / `high`，headless 请求成功（预算 16384）。
+  - 把写入值改成 `low` 后，实际请求预算变成 2048，说明 settings 里的这个值确实决定了请求。
