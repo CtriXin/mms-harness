@@ -81,3 +81,39 @@
 
 1. **C05.06 预览安全**：建议马上做（加 CSP，fs 限定在 workspace 内）。
 2. **C08.02/.03/.08 旧历史导入**：Pilot 自己也没做全，要不要做？
+
+## 第 3 批（2026-09-18）：C07 手机与远程访问，C 类，等机主决定
+
+**上游立场**
+
+- `packages/bundle/web-app/src/startup.ts:74-75` 会拒绝 `--host 0.0.0.0`，原文："intentionally not supported yet for safety: it would expose remote code execution to the network"。
+- README:58 说绑定所有网卡就能从 LAN 访问，但 README:153 和代码都是拒绝。以代码为准。
+
+**底层能力**
+
+- `resolveLanTrust()`（`src/index.ts:125`）在绑定 `0.0.0.0` 时会采样 LAN IPv4，写进 `/api` 的 Host/Origin 信任边界。
+- 每个 Host API 和 WebSocket 都要 token 换来的签名 cookie（实测是 303 跳转 + HttpOnly cookie，Max-Age 30 天）。
+- 只有 CLI 这一层主动拦截。通过 config 传 host 的路径没有看到拦截，但没有实测。
+
+**和 MMS 合同的差异**
+
+| MMS 合同 | dsh 现状 |
+|---|---|
+| C07.01 默认关闭的开关 | 没有开关 |
+| C07.03 二维码 | 没有 |
+| C07.04 轮换 token 后当前窗口不断 | 每次启动都生成新的 process token，是否因此需要重新扫码没实测 |
+| C07.05 外网使用引导 | 没有 |
+
+**三个方案**
+
+| 方案 | 做法 | 好处 | 风险 |
+|---|---|---|---|
+| A 绕过 CLI 检查 | 自有包通过 config 把 host 设成 `0.0.0.0`，复用 dsh 的 LAN 信任和 token；再补默认关闭的开关和二维码 | 改动最小 | **直接违背上游明写的安全决定**。上游以后如果在底层也加拦截，功能会突然失效。暴露面等于把 agent 的 shell 放到局域网上 |
+| B 自有 LAN 网关（**建议**） | dsh 保持只听 loopback。MMS 起一个默认关闭的网关，转发 HTTP 和 WebSocket；自己管一个跨重启不变的 token，支持轮换、Host/Origin 校验和二维码；网关持有 dsh 的 process token，代用户完成鉴权 | 不碰上游的绑定决定，也不受它以后改动影响。认证语义（持久 token、轮换不断线）由我们掌控，正好对应 C07.02/.04 | 暴露面实质上和 A 一样，只是鉴权换成我们自己做；多一跳转发；工作量最大 |
+| C 不开 LAN，只做隧道引导 | 用 `--trusted-host` 配合 Tailscale 或 SSH 端口转发，写使用引导 | 安全面最小，不需要写任何网络代码 | 手机要装 Tailscale；「同一 Wi-Fi 下扫码就能用」做不到 |
+
+**建议**：B 作为主方案，C 写进 C07.05 的外网引导。不管选哪个，远程开关都默认关闭。开启时界面要写明「局域网内拿到 token 的人可以在这台电脑上执行命令」。
+
+| 决定 |
+|---|
+| （待机主） |
