@@ -1,3 +1,7 @@
+# MMS fork ownership
+
+CtriXin/mms-harness is the requested MMS fork. Follow `mms/MIGRATION.md`; extension-only advice cannot replace migration. Preserve upstream MIT attribution and MMS imports’ Apache-2.0 license. Never publish under upstream npm names or commit user configuration/credentials.
+
 # AGENTS.md
 
 DeepSeek Harness is an all-plugin Cordis agent harness. Read [docs/architecture.md](docs/architecture.md) before changing `packages/`; follow [docs/AGENTS.md](docs/AGENTS.md) for documentation.

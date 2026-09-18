@@ -7,6 +7,8 @@ kind: "package-reference"
 
 English | [中文](README.zh.md)
 
+MMS fork: the composer also exposes a dedicated effort trigger. It opens the advertised levels in one click and restores focus to that trigger only after a successful selection. Model search matches model names, IDs, and channel names, focuses on entry, and preserves the query after a failed selection.
+
 ## Summary
 
 The Web GUI lets users switch the model and reasoning effort for an existing session through either the `/model` popup or the composer's model control. Both surfaces present the same provider-grouped choices, and the selected model determines the available effort names and default. A complete selection applies to the next request; a running step keeps the model and effort it started with. If no adapter can serve the session's route, the composer remains disabled until routing becomes available.

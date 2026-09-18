@@ -1758,3 +1758,43 @@ describe('DirectoryBrowser', () => {
     expect(b.listDirectory).toHaveBeenLastCalledWith(undefined, expect.any(AbortSignal))
   })
 })
+
+
+describe('MMS project lookup', () => {
+  it('focuses project search and browses a matching project before explicit confirmation', async () => {
+    const picked = vi.fn()
+    const listDirectory = vi.fn(async (path?: string) => listingFor(path))
+    render(<DirectoryBrowser open busy={false} listDirectory={listDirectory}
+      createDirectory={vi.fn()} onOpen={picked} onClose={vi.fn()} t={key => key}
+      recentDirectories={[{ name: 'Pilot', path: HARNESS }, { name: 'Documents', path: DOCS }]} />)
+    const search = screen.getByRole('textbox', { name: 'browser.searchProjects' })
+    expect(document.activeElement).toBe(search)
+    fireEvent.change(search, { target: { value: 'Pilot' } })
+    expect(screen.getByRole('button', { name: /Pilot/ })).toBeTruthy()
+    fireEvent.submit(search.closest('form')!)
+    await waitFor(() => { expect(listDirectory).toHaveBeenCalledWith(HARNESS, expect.any(AbortSignal)) })
+    expect(picked).not.toHaveBeenCalled()
+    await waitFor(() => { expect(screen.getByRole<HTMLButtonElement>('button', { name: 'browser.open' }).disabled).toBe(false) })
+    fireEvent.click(screen.getByRole('button', { name: 'browser.open' }))
+    expect(picked).toHaveBeenCalledWith(HARNESS)
+  })
+
+  it('does not adopt an invalid pasted path or an IME confirmation', async () => {
+    const picked = vi.fn()
+    const listDirectory = vi.fn(async (path?: string) => listingFor(path))
+    render(<DirectoryBrowser open busy={false} listDirectory={listDirectory}
+      createDirectory={vi.fn()} onOpen={picked} onClose={vi.fn()} t={key => key} />)
+    const search = screen.getByRole('textbox', { name: 'browser.searchProjects' })
+    await waitFor(() => { expect(listDirectory).toHaveBeenCalled() })
+    fireEvent.change(search, { target: { value: '/missing-project' } })
+    fireEvent.compositionStart(search)
+    fireEvent.submit(search.closest('form')!)
+    expect(listDirectory).not.toHaveBeenCalledWith('/missing-project', expect.any(AbortSignal))
+    fireEvent.compositionEnd(search)
+    fireEvent.submit(search.closest('form')!)
+    await waitFor(() => { expect(screen.getByRole('alert')).toBeTruthy() })
+    expect(picked).not.toHaveBeenCalled()
+    expect((search as HTMLInputElement).value).toBe('/missing-project')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'browser.open' }).disabled).toBe(true)
+  })
+})

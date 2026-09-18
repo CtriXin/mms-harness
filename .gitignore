@@ -47,3 +47,8 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 native/system/test/bin/
+
+# MMS integration state and Python caches
+/mms-plugin/
+/mms/**/__pycache__/
+/mms/**/.pytest_cache/

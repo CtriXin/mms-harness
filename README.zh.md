@@ -1,3 +1,5 @@
+> **MMS Harness** 是 CtriXin 的 DeepSeek Harness fork，将上游运行时与 MMS 模型路由、Recipe 校验及已迁移的产品交互组合。参见 [MMS 接入与迁移](mms/README.zh.md)。
+
 # DeepSeek Harness
 
 [English](README.md) | 中文

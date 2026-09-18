@@ -168,7 +168,7 @@ describe('directory-picker-browse client half', () => {
     const entry = b.slots.entries(HOLES[0])[0]!
     const injected = (entry.inject as () => { t: (key: string) => string })()
     // zh is the shipped default locale.
-    expect(injected.t('browser.title')).toBe('选择工作区目录')
+    expect(injected.t('browser.title')).toBe('找到你的项目')
     expect(injected.t('browser.newFolder')).toBe('新建文件夹')
     expect(injected.t('browser.showHidden')).toBe('显示隐藏文件')
   })
@@ -194,6 +194,7 @@ describe('directory-picker-browse client half', () => {
     const t = (key: string): string => key
     render(
       <BrowseDirectoryFlow
+        useWorkspaces={selector => selector({ items: [], archivedSessionIds: [], phase: 'ready', state: 'idle', error: null })}
         {...props}
         listDirectory={listDirectory}
         createDirectory={vi.fn(async () => '')}
@@ -213,6 +214,7 @@ describe('directory-picker-browse client half', () => {
   it('renders nothing while the flow is closed', () => {
     const view = render(
       <BrowseDirectoryFlow
+        useWorkspaces={selector => selector({ items: [], archivedSessionIds: [], phase: 'ready', state: 'idle', error: null })}
         {...owner({ open: false })}
         listDirectory={vi.fn(async () => homeListing)}
         createDirectory={vi.fn(async () => '')}

@@ -196,7 +196,7 @@ describe('ModelSelect reasoning effort', () => {
       t={t}
     />)
 
-    fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^选择模型/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
     const toast = await screen.findByRole('alert')
@@ -382,9 +382,8 @@ describe('ModelSelect keyboard walk', () => {
     trigger.focus()
     fireEvent.click(trigger)
     fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
-    // No rows to hand the keyboard to: the trigger keeps it, so the card's
-    // keys still reach the menu.
-    expect(document.activeElement).toBe(trigger)
+    // Search remains available even when the catalog has no rows.
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '搜索模型或通道' }))
 
     const retry = screen.getByRole('button', { name: '重试' })
     retry.focus()
@@ -398,11 +397,14 @@ describe('ModelSelect keyboard walk', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('drills into the model list on the selected model', () => {
+  it('opens model search and reaches the selected model with ArrowDown', () => {
     mountOpen()
     fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     const rows = screen.getAllByRole('menuitemradio')
     expect(rows[0]!.getAttribute('aria-checked')).toBe('true')
+    const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
+    expect(document.activeElement).toBe(search)
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(rows[0])
   })
 
@@ -429,7 +431,7 @@ describe('ModelSelect keyboard walk', () => {
     expect(document.activeElement).toBe(cells[0])
   })
 
-  it('a pane whose rows mark no current value opens on its first row', () => {
+  it('search reaches the first model when the current model is absent', () => {
     // The session runs a model the catalog no longer lists: no row is checked.
     render(<ModelSelect
       locked={false}
@@ -443,6 +445,54 @@ describe('ModelSelect keyboard walk', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     const rows = screen.getAllByRole('menuitemradio')
     expect(rows.every(row => row.getAttribute('aria-checked') === 'false')).toBe(true)
+    const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
+    expect(document.activeElement).toBe(search)
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(rows[0])
+  })
+})
+
+
+describe('MMS quick access', () => {
+  it('changes effort from its own trigger and returns focus only after host acceptance', async () => {
+    const directory = createSnapshotStore(state())
+    const result = Promise.withResolvers<{ ok: true; value: undefined }>()
+    const select = vi.fn(() => result.promise)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    const trigger = screen.getByRole('button', { name: '选择推理等级，当前 High' })
+    fireEvent.click(trigger)
+    expect(screen.getAllByRole('menuitemradio').map(row => row.textContent))
+      .toEqual(['Off', 'High', 'Max'])
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Max' }))
+    expect(select).toHaveBeenCalledWith({ provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' })
+    expect(screen.getByRole('menu')).toBeTruthy()
+    result.resolve({ ok: true, value: undefined })
+    await waitFor(() => { expect(screen.queryByRole('menu')).toBeNull() })
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('focuses model search, filters by channel, and leaves a rejected selection open', async () => {
+    const directory = createSnapshotStore(state({ groups: [
+      ...state().groups,
+      { id: 'backup', name: '备用东京', models: [{ id: 'gpt-test', name: 'GPT test' }] },
+    ] }))
+    const select = vi.fn(async () => ({ ok: false as const, error: new RemoteError('gateway/internal', 'offline', {}) }))
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
+    const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
+    expect(document.activeElement).toBe(search)
+    fireEvent.change(search, { target: { value: '东京' } })
+    expect(screen.getAllByRole('menuitemradio').map(row => row.textContent)).toEqual(['GPT test'])
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'GPT test' }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'backup', model: 'gpt-test' }) })
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect((search as HTMLInputElement).value).toBe('东京')
+  })
+
+  it('locks both model and effort controls together', () => {
+    render(<ModelSelect locked available directory={createSnapshotStore(state())} load={vi.fn()} select={vi.fn()} t={t} />)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /选择推理等级/ }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /选择模型，当前/ }).disabled).toBe(true)
   })
 })

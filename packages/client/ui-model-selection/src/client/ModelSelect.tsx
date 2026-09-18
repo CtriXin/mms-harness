@@ -3,13 +3,14 @@
  * Two-level selection per figma 496:26454's MenuDropdown: the root menu is
  * the Model / Effort row pair (label + current value + a right chevron),
  * each drilling into its own list — the provider-grouped model list over
- * the shared directory, and the effort levels. The trigger (313:14108's
- * ToggleButton) shows both: model name + effort in the caption tone.
+ * the shared directory, and the effort levels. The model trigger sits beside
+ * an always-visible effort trigger that opens the levels directly.
  * While open, ↑/↓ move focus across the rows of the shown pane (wrapping; a
  * step taken while the trigger still holds focus enters at the near end), Tab
  * settles like Enter, and Escape and Shift+Tab leave a drilled pane first and
- * otherwise close back to the trigger. A drilled pane hands focus to the row
- * of the value in use, and returning to the root pane hands it back to the
+ * otherwise close back to the opening trigger. The model pane focuses its
+ * search field; the effort pane focuses the current row. Returning to root
+ * hands focus back to the
  * cell that opened it. Data and submission ride the SAME per-session
  * ModelDirectory as the /model popup; exact-model reasoning metadata and the
  * selected effort come from the Host rather than a client-owned vocabulary. A
@@ -60,6 +61,7 @@ export function ModelSelect(
     () => directory.getSnapshot(),
   )
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [pane, setPane] = useState<Pane>('root')
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
@@ -71,6 +73,9 @@ export function ModelSelect(
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const effortTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const activeTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const searchRef = useRef<HTMLInputElement | null>(null)
   const [menuPos, setMenuPos] = useState<CSSProperties | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const id = useId()
@@ -142,6 +147,7 @@ export function ModelSelect(
     if (intent === 'drill') {
       // The checked row is the value in use; a pane without one opens on its
       // first row.
+      if (pane === 'model') { searchRef.current?.focus(); return }
       const checked = menuRef.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]:not([disabled])')
       const target = checked ?? itemRefs.current.find(item => item !== null && !item.disabled)
       // Rows a selection in flight disabled cannot take the keyboard; the
@@ -164,7 +170,7 @@ export function ModelSelect(
     if (!open) { setMenuPos(null); return }
     const place = (): void => {
       /* v8 ignore next 2 -- the trigger ref is attached whenever the menu is open. */
-      const rect = triggerRef.current?.getBoundingClientRect()
+      const rect = (activeTriggerRef.current ?? triggerRef.current)?.getBoundingClientRect()
       if (rect === undefined) return
       const MARGIN = 12
       const lw = menuRef.current?.offsetWidth ?? 0
@@ -190,6 +196,8 @@ export function ModelSelect(
   if (!available) return null
 
   const show = (): void => {
+    activeTriggerRef.current = triggerRef.current
+    setQuery('')
     setPane('root')
     setOpen(true)
     reload()
@@ -198,7 +206,7 @@ export function ModelSelect(
   const close = (restoreFocus = false): void => {
     setOpen(false)
     setPane('root')
-    if (restoreFocus) queueMicrotask(() => { triggerRef.current?.focus() })
+    if (restoreFocus) queueMicrotask(() => { (activeTriggerRef.current ?? triggerRef.current)?.focus() })
   }
 
   const drill = (next: Pane): void => {
@@ -226,6 +234,7 @@ export function ModelSelect(
   }
 
   const onRootKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.nativeEvent.isComposing) return
     if (event.key === 'Escape' && open) {
       event.preventDefault()
       // Escape backs out of a drilled pane first, then closes.
@@ -261,6 +270,7 @@ export function ModelSelect(
       ;(checked ?? rows.find(item => !item.disabled))?.focus()
       return
     }
+    if (event.target === searchRef.current && !['ArrowDown', 'ArrowUp'].includes(event.key)) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       moveFocus(event.key === 'ArrowDown' ? 1 : -1)
@@ -357,9 +367,28 @@ export function ModelSelect(
       >
         <IconDataOutline16 className={css.triggerIcon} size={16} />
         <span className={css.triggerLabel}>{modelLabel}</span>
-        {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
         <IconChevronDownOutline14 className={clsx(css.chevron, open && css.chevronOpen)} />
       </button>
+
+      {reasoning !== undefined && <button
+        ref={effortTriggerRef}
+        type="button"
+        className={clsx(css.trigger, css.effortTrigger)}
+        aria-label={t('effort.trigger', { effort: effortLabel ?? '' })}
+        aria-haspopup="menu"
+        aria-expanded={open && pane === 'effort'}
+        disabled={locked || busy}
+        onClick={() => {
+          if (open && pane === 'effort') { close(); return }
+          activeTriggerRef.current = effortTriggerRef.current
+          paneFocus.current = 'drill'
+          setPane('effort')
+          setOpen(true)
+          reload()
+        }}
+      >
+        <span>{effortLabel}</span><IconChevronDownOutline14 />
+      </button>}
 
       {/* Portaled to body (Menu primitive's portal mode) so the sidebar and
           column overflow clips cannot crop the card; synthetic events still
@@ -393,6 +422,9 @@ export function ModelSelect(
 
           {pane === 'model' && (
             <>
+              <input ref={searchRef} className={css.search} autoFocus
+                aria-label={t('search.models')} placeholder={t('search.models')}
+                value={query} onChange={(event) => { setQuery(event.target.value) }} />
               {state.status === 'loading' && (
                 <div className={css.status}>{t('status.loading')}</div>
               )}
@@ -409,37 +441,39 @@ export function ModelSelect(
                 </div>
               ))}
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
-                  const headingId = `${id}-${group.id}`
-                  return (
-                    <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
-                      <div className={css.groupTitle} id={headingId}>{group.name}</div>
-                      {group.models.map((model) => {
-                        const selected = state.current?.provider === group.id && state.current.model === model.id
-                        return (
-                          <button
-                            ref={itemRef()}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={selected}
-                            className={clsx(css.option, selected && css.selected)}
-                            key={model.id}
-                            title={model.name}
-                            disabled={busy}
-                            onClick={() => { choose({ provider: group.id, model: model.id }) }}
-                          >
-                            <span className={css.optionCopy}>
-                              <span className={css.modelName}>{model.name}</span>
-                            </span>
-                            <span className={css.check}>
-                              {selected ? <IconCheckOutline16 /> : null}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </section>
-                  )
-                })}
+                {state.groups.map(group => ({ ...group, models: group.models.filter(model =>
+                  `${group.name} ${model.name} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) }))
+                  .filter(group => group.models.length > 0).map((group) => {
+                    const headingId = `${id}-${group.id}`
+                    return (
+                      <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
+                        <div className={css.groupTitle} id={headingId}>{group.name}</div>
+                        {group.models.map((model) => {
+                          const selected = state.current?.provider === group.id && state.current.model === model.id
+                          return (
+                            <button
+                              ref={itemRef()}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={selected}
+                              className={clsx(css.option, selected && css.selected)}
+                              key={model.id}
+                              title={model.name}
+                              disabled={locked || busy}
+                              onClick={() => { choose({ provider: group.id, model: model.id }) }}
+                            >
+                              <span className={css.optionCopy}>
+                                <span className={css.modelName}>{model.name}</span>
+                              </span>
+                              <span className={css.check}>
+                                {selected ? <IconCheckOutline16 /> : null}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </section>
+                    )
+                  })}
               </div>
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
@@ -465,7 +499,7 @@ export function ModelSelect(
                     aria-checked={effectiveEffort === level.effort}
                     className={clsx(css.option, effectiveEffort === level.effort && css.selected)}
                     key={level.key}
-                    disabled={busy}
+                    disabled={locked || busy}
                     onClick={() => { chooseEffort(level.effort) }}
                   >
                     <span className={css.optionCopy}>

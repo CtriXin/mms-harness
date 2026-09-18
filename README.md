@@ -1,3 +1,5 @@
+> **MMS Harness** is CtriXin’s fork of DeepSeek Harness. It combines the upstream runtime with MMS model routing, Recipe checks, and migrated product interactions. See [MMS integration and migration](mms/README.md).
+
 # DeepSeek Harness
 
 English | [中文](README.zh.md)

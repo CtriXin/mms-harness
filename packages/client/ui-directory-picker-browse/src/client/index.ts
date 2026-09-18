@@ -36,7 +36,10 @@ export function apply(ctx: ClientContext): void {
     const disposers: (() => void)[] = []
     const dictionaries: [locale: string, dict: Record<string, string>][] = [
       ['zh', {
-        'browser.title': '选择工作区目录',
+        'browser.title': '找到你的项目',
+        'browser.searchProjects': '搜索项目名或输入文件夹路径',
+        'browser.projects': '已有项目',
+        'browser.go': '前往',
         'browser.home': '主目录',
         'browser.newFolder': '新建文件夹',
         'browser.folderName': '文件夹名称',
@@ -51,7 +54,10 @@ export function apply(ctx: ClientContext): void {
         'browser.showHidden': '显示隐藏文件',
       }],
       ['en', {
-        'browser.title': 'Select Workspace Directory',
+        'browser.title': 'Find your project',
+        'browser.searchProjects': 'Search projects or enter a folder path',
+        'browser.projects': 'Your projects',
+        'browser.go': 'Go',
         'browser.home': 'Home',
         'browser.newFolder': 'New folder',
         'browser.folderName': 'Folder name',
