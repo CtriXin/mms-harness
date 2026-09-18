@@ -299,7 +299,7 @@
 
 - [ ] **C13.01 流式回复、thinking/tools分组、时间与用量**（原版 R；fork：未验；[E01](MIGRATION-EVIDENCE.md#e01)）。验收：DSH已有底座，需对齐完整工具失败/最终答案可见性。
 - [ ] **C13.02 单轮/全部过程折叠与完成自动折叠偏好**（原版 R；fork：未迁；[E01](MIGRATION-EVIDENCE.md#e01)）。验收：错误、待确认、最终答案不被折叠掉。
-- [ ] **C13.03 steer/interrupt与普通follow-up队列分离**（原版 P；fork：未验；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：真实忙碌会话分别接受/排队/停止，不混成普通消息。
+- [ ] **C13.03 steer/interrupt与普通follow-up队列分离**（原版 P；fork：部分，停止会 kill 后台 job 且不再唤醒（`mms-stop`，gate L5 已验），队列/插话为上游原生、实测可用，未跑完整忙碌会话三态验收；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：真实忙碌会话分别接受/排队/停止，不混成普通消息。
 - [ ] **C13.04 队列提升/移除/重排及实际delivery状态**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：服务端实际顺序一致；已送达不能显示撤回成功。
 - [ ] **C13.05 中途引导或重启后的空白回合和重发**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：中断原因可见，作废消息可准备重发，不自动重放。
 - [ ] **C13.06 BTW独立上下文与主transcript/queue隔离**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：旁问不打断主任务；有界脱敏上下文，取消互不影响；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。

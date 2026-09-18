@@ -19,6 +19,8 @@ import sys
 import tempfile
 import time
 import urllib.request
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +86,9 @@ def offline(node: Path, build: bool, runtime_from: Path):
     out = run([str(node), '--test', 'test_remote.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
     record('O6 remote gateway, QR page, /remote (C07.01-.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
+    out = run([str(node), '--test', 'test_stop.mjs'], cwd=ADAPTER, env=env)
+    tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
+    record('O7 stop kills owned jobs (C13.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
     out = run(['npx', '--no-install', 'vitest', 'run', *FORK_TESTS], env=env)
     tail = [l.strip() for l in (out.stdout + out.stderr).splitlines() if l.strip().startswith(('Test Files', 'Tests'))]
     record('O3 fork client packages (C14.01/.02, C12)', 'PASS' if out.returncode == 0 else 'FAIL', ' · '.join(tail))
@@ -187,8 +192,6 @@ def live(node: Path, mms_root: Path, runtime_from: Path, keep: bool):
         record('L4 C01.02 credential fail-closed', 'PASS' if passed else 'FAIL', f'exit={out.returncode} requests={len(ev)}')
         inst.credentials.write_text(inst.pristine_credentials)
 
-        record('L5 C13.03 stop kills background job, no wake', 'PENDING', 'mms stop package not built yet (UPSTREAM-DECISIONS 第 1 批)')
-
         web_smoke(inst)
     finally:
         if keep:
@@ -229,6 +232,8 @@ def web_smoke(inst: Instance):
         passed = bool(installed['client_artifacts']) and title is not None and 'MMS Harness' in title.group(1)
         record('W1 Web boots with fork client', 'PASS' if passed else 'FAIL',
                f'port={port} title={title.group(1) if title else None!r} artifacts={len(installed["client_artifacts"])}; UI 行为见 SYNC-GATE.md 手工项')
+        if passed:
+            stop_check(inst, opener, f'http://127.0.0.1:{port}')
     finally:
         proc.terminate()  # only the PID this gate started
         try:
@@ -236,6 +241,46 @@ def web_smoke(inst: Instance):
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
+
+
+def rpc(opener, base, method, request):
+    """One Remote unary call, exactly as the browser sends it (POST /api/<method>)."""
+    body = json.dumps({'type': 'client-request', 'rpcId': str(uuid.uuid4()), 'method': method,
+                       'payload': {'args': {'request': request}}}).encode()
+    req = urllib.request.Request(f'{base}/api/{method}', data=body, headers={'content-type': 'application/json', 'origin': base})
+    result = json.loads(opener.open(req, timeout=30).read())['result']
+    if not result.get('ok'):
+        raise RuntimeError(f'{method}: {result.get("error")}')
+    return result['value']
+
+
+def stop_check(inst: Instance, opener, base):
+    """L5: Stop kills the model's background job and nothing wakes the session afterwards."""
+    marker = f'gate_stop_{uuid.uuid4().hex[:8]}'
+    running = lambda: run(['pgrep', '-f', marker]).returncode == 0
+    try:
+        session = rpc(opener, base, 'session/create', {'cwd': str(inst.workspace)})['sessionId']
+        rpc(opener, base, 'session/prompt', {'requestId': str(uuid.uuid4()), 'sessionId': session, 'mode': 'queue', 'content': [
+            {'type': 'text', 'text': f'用 bash 在后台启动任务：sleep 25 && echo DONE > {marker}.txt ，然后用 job_output wait:true 等它完成，再告诉我结果。'}]})
+        for _ in range(90):
+            if running(): break
+            time.sleep(1)
+        else:
+            record('L5 C13.03 stop kills background job, no wake', 'FAIL', 'model never started the background job (no marker process in 90s)')
+            return
+        time.sleep(3)
+        rpc(opener, base, 'session/cancel', {'sessionId': session})
+        stopped = time.time()
+        time.sleep(35)  # past the job's 25 s deadline plus any wake-up turn
+        evidence = [json.loads(l) for l in (inst.instance / 'transport.jsonl').read_text().splitlines() if l.strip()]
+        after = [e for e in evidence if e.get('status') == 200
+                 and datetime.fromisoformat(e['timestamp'].replace('Z', '+00:00')).timestamp() > stopped + 2]
+        written = (inst.workspace / f'{marker}.txt').exists()
+        passed = not written and not running() and not after
+        record('L5 C13.03 stop kills background job, no wake', 'PASS' if passed else 'FAIL',
+               f'marker_written={written} job_alive={running()} requests_after_stop={len(after)}')
+    except (OSError, RuntimeError, KeyError) as e:
+        record('L5 C13.03 stop kills background job, no wake', 'FAIL', str(e)[:300])
 
 
 def main():

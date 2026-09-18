@@ -212,6 +212,8 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
                      'config': {'root': str(instance), 'recipeCore': (REPO / 'apps/mms-web/src/recipe-core.ts').as_uri()}}]},
         # `/remote` (C07): the installation root is the instance's parent; without
         # installation.json there the command reports remote access unavailable.
+        # Stop kills the agent's background jobs so no completion wakes it (C13.03).
+        {'insert': [{'id': 'mms-stop', 'name': str(Path(__file__).with_name('plugin-stop.mjs'))}]},
         {'insert': [{'id': 'mms-remote', 'name': str(Path(__file__).with_name('plugin-remote.mjs')),
                      'config': {'installation': str(instance.parent)}}]},
     ]

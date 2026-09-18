@@ -21,7 +21,7 @@
 
 | 能力项 | 类 | 上游对应物 | 行为差异（到可验收那句） | 建议 | 证据 | 决定 |
 |---|---|---|---|---|---|---|
-| C13.03 停止 / C08.07 不重放副作用 | B | `jobs/tool-jobs`（`completionDelivery=wakeup`，`maxConsecutiveWakes=3`） | 点停止只中止当前回合，不 kill 后台 job；job 完成后会自动开新回合（实测第 5 轮） | 做自有包：点停止时 kill 本会话的后台 job，并且这次停止后不再唤醒 | 实测 + 源码 | **同意做自有包**。验收：起后台 job → 点停止 → 断言 job 被 kill，且不会自动开新回合；列入「同步上游必跑」 |
+| C13.03 停止 / C08.07 不重放副作用 | B | `jobs/tool-jobs`（`completionDelivery=wakeup`，`maxConsecutiveWakes=3`） | 点停止只中止当前回合，不 kill 后台 job；job 完成后会自动开新回合（实测第 5 轮） | 做自有包：点停止时 kill 本会话的后台 job，并且这次停止后不再唤醒 | 实测 + 源码 | **同意做自有包**。验收：起后台 job → 点停止 → 断言 job 被 kill，且不会自动开新回合；列入「同步上游必跑」。**已完成**：`mms/adapter/plugin-stop.mjs`，gate O7 + L5 PASS，端到端 mutation 红→绿 |
 | C13.02 过程折叠 | A | `client/ui-chat` | 缺「全部折叠」按钮 | 标「由上游满足」 | 实测 | 按建议 |
 | C13.03/.04 排队与插话 | A/B | `ui-conversation` QueueDock，`QueueAction`=edit/remove/steer | 不能重排 | 标「由上游满足」，重排不迁 | 实测 + 源码 | 按建议 |
 | C13.06–.08 BTW 旁问 | 缺失 | 无 | — | 进桶 B，做独立包 | 源码 | 按建议 |
