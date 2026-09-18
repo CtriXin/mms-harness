@@ -14,6 +14,7 @@ import { connect } from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import qrcode from '../vendor/qrcode-generator/qrcode.mjs';
 
 export const COOKIE = 'mms_harness_key';
 export const QUERY = 'k';
@@ -112,7 +113,36 @@ export async function upstreamCookie(startUrl) {
   return set.split(';')[0];
 }
 
-export function createGateway({ upstream, upstreamAuth, allowedHosts, readToken, log = () => {} }) {
+const LOOPBACK_PEERS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+export const QR_PATH = '/__mms/remote';
+
+/** The nonce `/remote` just wrote: valid for five minutes, compared in constant time. */
+export function nonceValid(presented, readNonce, now = Date.now()) {
+  let stored;
+  try { stored = readNonce(); } catch { return false; }
+  return Boolean(stored?.nonce) && stored.expires > now && tokenMatches(presented, stored.nonce);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+export function qrPage(links) {
+  const cards = links.map(({ label, url }) => {
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    return `<section><h2>${escapeHtml(label)}</h2>${qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true })}</section>`;
+  }).join('');
+  return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>MMS Harness 远程访问</title>'
+    + '<style>body{font:15px system-ui;margin:2em;max-width:44em}section{display:inline-block;margin:0 1.5em 1.5em 0;vertical-align:top}'
+    + 'svg{width:14em;height:14em;display:block}h2{font-size:15px}</style>'
+    + '<h1 style="font-size:18px">用手机扫码打开 MMS Harness</h1>'
+    + '<p>拿到这个码的人可以在这台电脑上执行命令。只给自己的设备扫；泄露后在对话里运行 <code>/remote rotate</code>。</p>'
+    + (cards || '<p>没有可用的局域网地址。连上 Wi-Fi 或 Tailscale 后再运行 <code>/remote status</code>。</p>');
+}
+
+export function createGateway({ upstream, upstreamAuth, allowedHosts, readToken, log = () => {}, readNonce = () => null, links = () => [] }) {
   const target = new URL(upstream);
   const upstreamHost = target.host;
   // Method and pathname only: the query may carry the token.
@@ -123,6 +153,19 @@ export function createGateway({ upstream, upstreamAuth, allowedHosts, readToken,
     res.end(verdict.status === 401 ? DENIED : '');
   };
   const server = createServer((req, res) => {
+    const parsed = new URL(req.url, 'http://gateway.invalid');
+    if (parsed.pathname === QR_PATH) {
+      // The QR carries the token: only this machine's own browser, holding the
+      // nonce the authenticated `/remote` command just issued, may see it.
+      const host = String(req.headers.host || '').toLowerCase();
+      const local = LOOPBACK_PEERS.has(req.socket.remoteAddress) && /^(127\.0\.0\.1|localhost):\d+$/.test(host) && allowedHosts.has(host);
+      if (!local || req.method !== 'GET' || !nonceValid(parsed.searchParams.get('n'), readNonce)) {
+        return deny(req, res, { status: 404, reason: 'qr' });
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:" });
+      return res.end(qrPage(links()));
+    }
     const verdict = decide(req, { allowedHosts, token: readToken() });
     if (verdict.status === 303) {
       res.writeHead(303, { location: verdict.location, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
@@ -177,8 +220,13 @@ if (import.meta.main) {
   const addresses = settings.mode === 'lan' ? lanAddresses() : [];
   const allowedHosts = allowedHostsFor(settings.port, addresses, settings.hostnames || []);
   const log = line => process.stderr.write(`[mms-remote] ${new Date().toISOString()} ${line}\n`);
+  const nonceFile = process.env.MMS_REMOTE_QR_NONCE_FILE;
+  // 100.64.0.0/10 is carrier-grade NAT space, which is where Tailscale addresses live.
+  const kind = a => { const [x, y] = a.split('.').map(Number); return x === 100 && y >= 64 && y < 128 ? 'Tailscale' : '局域网'; };
+  const links = () => [...addresses.map(a => ({ label: `${kind(a)} ${a}`, url: `http://${a}:${settings.port}/?${QUERY}=${readToken()}` })),
+    ...(settings.hostnames || []).map(n => ({ label: `隧道 ${n}`, url: `https://${n}/?${QUERY}=${readToken()}` }))];
   const server = () => createGateway({ upstream: process.env.MMS_REMOTE_UPSTREAM, upstreamAuth: () => auth,
-    allowedHosts, readToken, log });
+    allowedHosts, readToken, log, links, readNonce: () => JSON.parse(readFileSync(nonceFile, 'utf8')) });
   // One socket per address: a wildcard bind would keep a port open on every interface.
   for (const address of ['127.0.0.1', ...addresses]) {
     server().listen(settings.port, address, () => log(`listening ${address}:${settings.port}`));

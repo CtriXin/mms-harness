@@ -178,9 +178,9 @@
 
 回归入口：[tests/test_mms_web_remote_access.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_remote_access.py)；[tests/test_mms_web_remote_access_cookie.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_remote_access_cookie.py)；[tests/test_mms_web_update_auth_transport.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_update_auth_transport.py)。路径按新布局核对；此处不等同本轮执行。
 
-- [ ] **C07.01 默认关闭的 LAN 访问开关、模式持久化与地址展示**（原版 R；fork：部分，CLI 开关已实测、应用内开关未做，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：开启后监听正确接口，关闭后释放；本机入口仍可用。
+- [x] **C07.01 默认关闭的 LAN 访问开关、模式持久化与地址展示**（原版 R；fork：已验，应用内 `/remote` 与 CLI，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：开启后监听正确接口，关闭后释放；本机入口仍可用。
 - [x] **C07.02 认证 token、Host/Origin 与无凭据拒绝**（原版 R；fork：已验，gate O6 + 端到端，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：读写/附件/批准均鉴权；不因开放监听绕过保护。
-- [ ] **C07.03 二维码与远程地址使用入口**（原版 P；fork：部分，地址由 `remote status` 打印，二维码待批准 `qrcode-generator` 依赖；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：二维码连接正确地址；敏感 token 不进入公开日志。
+- [x] **C07.03 二维码与远程地址使用入口**（原版 P；fork：已验，本机限定扫码页，二维码解码逐字核对，口令不进会话日志；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：二维码连接正确地址；敏感 token 不进入公开日志。
 - [ ] **C07.04 开启远程或轮换 token 后当前窗口不断登录**（原版 R；fork：部分，本机窗口始终不受影响、服务重启后远端 cookie 保持已实测，轮换后远端旧 cookie 立即 401；应用内轮换未做；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：当前窗口 cookie 正确更新，旧 token/无 cookie 拒绝。
 - [ ] **C07.05 外网使用引导位于远程总开关下**（原版 P；fork：部分，`remote status` 与 REMOTE.md 给出 Tailscale / 隧道引导，未实测跨网；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：说明实际可用入口；不能把引导当成已部署公网隧道。
 - [ ] **C07.06 移动端弹层、visualViewport 与软键盘适配**（原版 P；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：390px 已验目录/effort；真实手机键盘和内置浏览器仍需独立验收。

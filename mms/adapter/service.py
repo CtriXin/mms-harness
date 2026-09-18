@@ -93,7 +93,8 @@ def start_gateway(root, config, dsh_url):
     # Secrets travel by env and file, never argv, so they stay out of `ps`.
     env = {k: os.environ[k] for k in ('LANG', 'LC_ALL', 'TMPDIR') if k in os.environ}
     env.update({'PATH': '/usr/bin:/bin', 'MMS_REMOTE_SETTINGS': str(settings_file), 'MMS_REMOTE_TOKEN_FILE': str(token),
-                'MMS_REMOTE_UPSTREAM': upstream, 'MMS_REMOTE_UPSTREAM_START': dsh_url})
+                'MMS_REMOTE_UPSTREAM': upstream, 'MMS_REMOTE_UPSTREAM_START': dsh_url,
+                'MMS_REMOTE_QR_NONCE_FILE': str(root/'remote'/'qr-nonce')})
     fd = os.open(log, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as stream:
         process = subprocess.Popen([config['node'], str(root/'source/mms/adapter/remote.mjs'), f'--installation={root}'],

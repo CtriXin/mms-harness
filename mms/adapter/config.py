@@ -210,6 +210,10 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
                     {'id': 'mms-directory-picker-ui', 'name': '@deepseek-ai/dsh-client-ui-directory-picker-browse'}]},
         {'insert': [{'id': 'mms-recipe', 'name': str(plugin_path or Path(__file__).with_name('plugin.mjs')),
                      'config': {'root': str(instance), 'recipeCore': (REPO / 'apps/mms-web/src/recipe-core.ts').as_uri()}}]},
+        # `/remote` (C07): the installation root is the instance's parent; without
+        # installation.json there the command reports remote access unavailable.
+        {'insert': [{'id': 'mms-remote', 'name': str(Path(__file__).with_name('plugin-remote.mjs')),
+                     'config': {'installation': str(instance.parent)}}]},
     ]
     private_json(instance / 'mms.patch.yml', patch)
     return metadata

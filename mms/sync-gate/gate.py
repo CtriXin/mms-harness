@@ -83,7 +83,7 @@ def offline(node: Path, build: bool, runtime_from: Path):
     record('O2 adapter Recipe/observe (C03/C02)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
     out = run([str(node), '--test', 'test_remote.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
-    record('O6 remote gateway auth/Host/Origin/WS/rotate (C07.02)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
+    record('O6 remote gateway, QR page, /remote (C07.01-.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
     out = run(['npx', '--no-install', 'vitest', 'run', *FORK_TESTS], env=env)
     tail = [l.strip() for l in (out.stdout + out.stderr).splitlines() if l.strip().startswith(('Test Files', 'Tests'))]
     record('O3 fork client packages (C14.01/.02, C12)', 'PASS' if out.returncode == 0 else 'FAIL', ' · '.join(tail))

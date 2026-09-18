@@ -170,3 +170,68 @@ test('allowed hosts: bound addresses and tunnel names only', () => {
   assert.ok(!hosts.has('192.168.1.6:3093'));
   assert.ok(!hosts.has('192.168.1.5:3092'));
 });
+
+// ---- QR page and `/remote` command (C07.01/.03) ----
+import { QR_PATH, nonceValid, qrPage } from './remote.mjs';
+import { redact, remoteCommand, writeNonce } from './plugin-remote.mjs';
+import { statSync, mkdirSync } from 'node:fs';
+
+async function qrSetup(nonce) {
+  let port;
+  const gateway = createGateway({ upstream: 'http://127.0.0.1:9', upstreamAuth: () => '', readToken: () => TOKEN,
+    allowedHosts: { has: h => h === `127.0.0.1:${port}` || h === `phone.example:${port}` },
+    readNonce: () => nonce, links: () => [{ label: 'LAN', url: `http://10.0.0.2:1/?k=${TOKEN}` }] });
+  port = await listen(gateway);
+  return { port, close: () => { gateway.closeAllConnections(); gateway.close(); } };
+}
+
+test('QR page: loopback browser with a fresh nonce only', async () => {
+  const good = { nonce: 'n-' + 'c'.repeat(30), expires: Date.now() + 60_000 };
+  const t = await qrSetup(good);
+  try {
+    const ok = await get(t.port, `${QR_PATH}?n=${good.nonce}`);
+    assert.equal(ok.status, 200);
+    assert.match(ok.body, /<svg/);
+    assert.match(ok.headers['content-security-policy'], /default-src 'none'/);
+    assert.equal((await get(t.port, QR_PATH)).status, 404);
+    assert.equal((await get(t.port, `${QR_PATH}?n=wrong`)).status, 404);
+    // A tunnel arrives from loopback too, but carries its own Host: never shown.
+    assert.equal((await get(t.port, `${QR_PATH}?n=${good.nonce}`, { host: `phone.example:${t.port}` })).status, 404);
+  } finally { t.close(); }
+  const expired = await qrSetup({ nonce: good.nonce, expires: Date.now() - 1 });
+  try { assert.equal((await get(expired.port, `${QR_PATH}?n=${good.nonce}`)).status, 404); } finally { expired.close(); }
+});
+
+test('nonce check fails closed on unreadable state', () => {
+  assert.equal(nonceValid('x', () => { throw new Error('ENOENT'); }), false);
+  assert.equal(nonceValid('', () => ({ nonce: '', expires: Infinity })), false);
+});
+
+test('QR page escapes labels and encodes each link', () => {
+  const html = qrPage([{ label: '<b>x</b>', url: 'http://a/?k=1' }]);
+  assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt;'));
+  assert.equal((html.match(/<svg/g) || []).length, 1);
+});
+
+test('/remote never puts the token into command output, and issues a private nonce', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mms-remote-cmd-'));
+  try {
+    writeFileSync(join(dir, 'installation.json'), JSON.stringify({ port: 3092, python: 'python3' }));
+    mkdirSync(join(dir, 'remote'));
+    writeFileSync(join(dir, 'remote/settings.json'), JSON.stringify({ mode: 'lan', port: 3093, hostnames: [] }));
+    const run = async () => `远程访问：开启（局域网）\n  局域网：http://10.0.0.2:3093/?k=${TOKEN}\n  外网使用：… remote add-host …\n`;
+    const r = await remoteCommand('on', { installation: dir, run });
+    assert.equal(r.kind, 'success');
+    assert.ok(!r.text.includes(TOKEN));
+    assert.match(r.text, /\?k=…/);
+    const nonce = JSON.parse(readFileSync(join(dir, 'remote/qr-nonce'), 'utf8')).nonce;
+    assert.ok(r.text.includes(`http://127.0.0.1:3093/__mms/remote?n=${nonce}`));
+    assert.equal(statSync(join(dir, 'remote/qr-nonce')).mode & 0o077, 0);
+    assert.equal((await remoteCommand('bogus', { installation: dir, run })).kind, 'error');
+    assert.equal((await remoteCommand('on', { installation: join(dir, 'nope'), run })).kind, 'error');
+    writeFileSync(join(dir, 'remote/settings.json'), JSON.stringify({ mode: 'off', port: 3093 }));
+    assert.ok(!(await remoteCommand('off', { installation: dir, run: async () => '远程访问：关闭\n' })).text.includes('__mms'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  assert.equal(redact(`a?k=${TOKEN}&x=1`), 'a?k=…&x=1');
+  void writeNonce;
+});
