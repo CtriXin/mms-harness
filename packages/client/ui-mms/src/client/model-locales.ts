@@ -1,5 +1,6 @@
 /**
- * `model` namespace dictionaries.
+ * `mms-model` namespace dictionaries: a copy of ui-model-selection's `model`
+ * keys (the seat renders a copy of its ModelSelect) plus search and effort.
  *
  * `trigger.selectAria` intentionally matches `trigger.fallback` but remains a
  * separate key: the visible fallback label and the accessible name of
@@ -20,6 +21,8 @@ export const zh = {
   'trigger.selectAria': '选择模型',
   'trigger.aria': '选择模型，当前 {model}',
   'trigger.ariaEffort': '选择模型，当前 {model}，推理等级 {effort}',
+  'effort.trigger': '选择推理等级，当前 {effort}',
+  'search.models': '搜索模型或通道',
   'menu.aria': '模型与推理等级',
   'menu.model': '模型',
   'menu.effort': '推理等级',
@@ -49,6 +52,8 @@ export const en = {
   'trigger.selectAria': 'Select model',
   'trigger.aria': 'Select model, current {model}',
   'trigger.ariaEffort': 'Select model, current {model}, reasoning effort {effort}',
+  'effort.trigger': 'Select effort, current {effort}',
+  'search.models': 'Search models or channels',
   'menu.aria': 'Model and reasoning effort',
   'menu.model': 'Model',
   'menu.effort': 'Effort',

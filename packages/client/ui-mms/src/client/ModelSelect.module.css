@@ -1,4 +1,6 @@
 .root {
+  display: flex;
+  align-items: center;
   position: relative;
   min-width: 0;
 }
@@ -290,4 +292,24 @@
 .cellChevron {
   flex: 0 0 auto;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.effortTrigger {
+  flex: 0 0 auto;
+  max-width: none;
+  padding: 0 8px;
+}
+
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  outline-offset: -2px;
+  font: inherit;
 }

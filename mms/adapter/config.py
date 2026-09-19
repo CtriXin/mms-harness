@@ -191,7 +191,8 @@ def seed_default_selection(path: Path, selection: dict):
     path.write_text(text + ('' if not text or text.endswith('\n') else '\n') + block)
 
 
-def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plugin_path=None, previous_credentials=None):
+def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plugin_path=None, previous_credentials=None,
+              ui_overlay: Path | None = None):
     data = read_config(root)
     choices = [r for r in data['routes'] if r['logical_model'] == default_model and r['rank'] == 0]
     if len(choices) != 1:
@@ -234,5 +235,11 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
         {'insert': [{'id': 'mms-remote', 'name': str(Path(__file__).with_name('plugin-remote.mjs')),
                      'config': {'installation': str(instance.parent)}}]},
     ]
+    if ui_overlay is not None:
+        # Fork UI overlay: shadows the brand name, model seat and folder dialog
+        # at a lower slot priority; upstream occupants stay loaded underneath.
+        # The package is outside dsh's dependency closure, so the row names its
+        # file; the host takes the client manifest from the nearest package.json.
+        patch.append({'insert': [{'id': 'mms-ui', 'name': str(ui_overlay / 'lib/index.js')}]})
     private_json(instance / 'mms.patch.yml', patch)
     return metadata

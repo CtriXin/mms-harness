@@ -46,6 +46,8 @@ import css from './DirectoryBrowser.module.css'
 
 /** Owner-supplied browser props: browse calls, pick semantics, and copy. */
 export interface DirectoryBrowserProps {
+  /** Existing host projects, newest first, searchable without scanning the filesystem. */
+  recentDirectories?: readonly { name: string; path: string }[]
   /** Dialog visibility (owner-local; closed unmounts nothing but resets on reopen). */
   open: boolean
   /**
@@ -270,7 +272,10 @@ function LevelColumn({ entries, selectedPath, busy, onPick, showHidden, filterPr
  * @param props - owner-controlled browser props.
  * @returns the dialog element (null while closed, via Modal).
  */
-export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen, onClose, busy, t }: DirectoryBrowserProps) {
+export function DirectoryBrowser({
+  open, listDirectory, createDirectory, onOpen, onClose, busy, t, recentDirectories = [],
+}: DirectoryBrowserProps) {
+  const [projectQuery, setProjectQuery] = useState('')
   // Miller state: the listed level, the selected row in it, and the selected
   // folder's own listing (the right column; null while nothing is selected).
   const [parent, setParent] = useState<DirectoryListing | null>(null)
@@ -418,6 +423,7 @@ export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen,
     const settle = (): void => {
       setLoading(false)
       if (options.closeEditor) {
+        if (path !== undefined) setProjectQuery('')
         setPathDraft(null)
         return
       }
@@ -575,6 +581,7 @@ export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen,
   useEffect(() => {
     openGeneration.current += 1
     if (open) {
+      setProjectQuery('')
       setParent(null)
       setSelected(null)
       setChild(null)
@@ -757,7 +764,9 @@ export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen,
   // An uncommitted path draft makes targetPath stale relative to the header:
   // committing actions must not act on the previous selection/listing while
   // a different path is displayed.
-  const draftPending = pathDraft !== null
+  const draftPending = pathDraft !== null || projectQuery.trim() !== ''
+  const projectMatches = recentDirectories.filter(project =>
+    `${project.name} ${project.path}`.toLowerCase().includes(projectQuery.trim().toLowerCase())).slice(0, 6)
 
   return (
     <Modal
@@ -817,6 +826,26 @@ export function DirectoryBrowser({ open, listDirectory, createDirectory, onOpen,
       >
         <div className={css.header}>
           <h2 className={css.title}>{t('browser.title')}</h2>
+          <form className={css.projectSearch} onSubmit={(event) => {
+            event.preventDefault()
+            if (parentInert || composingRef.current || !projectQuery.trim()) return
+            navigate(projectMatches.length === 1 ? projectMatches[0]?.path : projectQuery.trim())
+          }}>
+            <input autoFocus aria-label={t('browser.searchProjects')}
+              placeholder={t('browser.searchProjects')} value={projectQuery} disabled={parentInert}
+              {...compositionGuard} onChange={(event) => {
+                supersede()
+                setLoading(false)
+                setProjectQuery(event.target.value)
+              }} />
+            <Button type="submit" disabled={parentInert || !projectQuery.trim()}>{t('browser.go')}</Button>
+          </form>
+          {projectMatches.length > 0 && <div className={css.projects} aria-label={t('browser.projects')}>
+            {projectMatches.map(project => <button key={project.path} type="button" disabled={parentInert}
+              title={project.path} onClick={() => { navigate(project.path) }}>
+              <IconFolderClose16 /><span>{project.name}<small>{project.path}</small></span>
+            </button>)}
+          </div>}
           <div className={css.crumbBar}>
             {pathDraft === null
               ? (

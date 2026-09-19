@@ -140,3 +140,15 @@ def test_mms_effort_preference_reaches_dsh_settings_once(tmp_path):
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
     seeded=(instance/'home/settings.yaml').read_text()
     assert seeded.startswith(other) and 'reasoningEffort: "high"' in seeded
+
+
+def test_ui_overlay_row_names_its_file_only_when_installed(tmp_path):
+    # The overlay is outside dsh's dependency closure, so a bare package name
+    # cannot resolve (ERR_MODULE_NOT_FOUND at boot); the row carries the file.
+    root=bundle_dir(tmp_path,payload()); instance=tmp_path/'instance'
+    rows=lambda: [r for p in json.loads((instance/'mms.patch.yml').read_text()) for r in p.get('insert',[]) if r['id']=='mms-ui']
+    configure(root,instance,'deepseek-test')
+    assert rows()==[]
+    overlay=tmp_path/'runtime/node_modules/@deepseek-ai/dsh-client-ui-mms'
+    configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()),ui_overlay=overlay)
+    assert rows()==[{'id':'mms-ui','name':str(overlay/'lib/index.js')}]

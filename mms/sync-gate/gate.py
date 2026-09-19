@@ -27,8 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 ADAPTER = ROOT / 'mms/adapter'
 REGISTRY = ROOT / 'mms/UPSTREAM-PATCHES.md'
 LEAKY_ENV = ('MMS_CONFIG_ROOT', 'REAL_HOME', 'ORIGINAL_HOME', 'MMS_REAL_HOME', 'XDG_CONFIG_HOME')
-FORK_TESTS = ['packages/client/ui-directory-picker-browse/tests', 'packages/client/ui-model-selection/tests',
-              'packages/client/ui-sidebar/tests']
+# The fork's UI overlay, plus the upstream packages whose cells and services it
+# relies on (their own suites prove what the overlay builds on is unchanged).
+FORK_TESTS = ['packages/client/ui-mms/tests', 'packages/client/ui-directory-picker-browse/tests',
+              'packages/client/ui-model-selection/tests', 'packages/client/ui-sidebar/tests/']
 results: list[tuple[str, str, str]] = []
 
 
@@ -91,7 +93,7 @@ def offline(node: Path, build: bool, runtime_from: Path):
     record('O7 stop kills owned jobs (C13.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
     out = run(['npx', '--no-install', 'vitest', 'run', *FORK_TESTS], env=env)
     tail = [l.strip() for l in (out.stdout + out.stderr).splitlines() if l.strip().startswith(('Test Files', 'Tests'))]
-    record('O3 fork client packages (C14.01/.02, C12)', 'PASS' if out.returncode == 0 else 'FAIL', ' · '.join(tail))
+    record('O3 fork UI overlay ui-mms + overlaid upstream (C14.01/.02, C12, C15)', 'PASS' if out.returncode == 0 else 'FAIL', ' · '.join(tail))
     check_patch_registry()
     if build:
         out = run(['pnpm', 'run', 'build'], env={**env, 'DSH_CLIENT_TITLE': 'MMS Harness'}, timeout=3600)
@@ -233,6 +235,7 @@ def web_smoke(inst: Instance):
         record('W1 Web boots with fork client', 'PASS' if passed else 'FAIL',
                f'port={port} title={title.group(1) if title else None!r} artifacts={len(installed["client_artifacts"])}; UI 行为见 SYNC-GATE.md 手工项')
         if passed:
+            overlay_check(opener, f'http://127.0.0.1:{port}')
             stop_check(inst, opener, f'http://127.0.0.1:{port}')
     finally:
         proc.terminate()  # only the PID this gate started
@@ -281,6 +284,19 @@ def stop_check(inst: Instance, opener, base):
                f'marker_written={written} job_alive={running()} requests_after_stop={len(after)}')
     except (OSError, RuntimeError, KeyError) as e:
         record('L5 C13.03 stop kills background job, no wake', 'FAIL', str(e)[:300])
+
+
+def overlay_check(opener, base):
+    """The host must serve the fork's overlay row; otherwise every cell silently falls back to upstream."""
+    try:
+        body = opener.open(f'{base}/plugins/@deepseek-ai/dsh-client-ui-mms/client.js', timeout=10).read().decode()
+    except OSError as e:
+        record('W2 fork UI overlay served (ui-mms)', 'FAIL', str(e)[:300])
+        return
+    cells = ['sidebar.brand.name', 'conversation.input.model', 'conversation.hero.workspace.directoryFlow']
+    missing = [c for c in cells if c not in body]
+    record('W2 fork UI overlay served (ui-mms)', 'FAIL' if missing else 'PASS',
+           f'{len(body)} bytes' + (f'; missing {missing}' if missing else '; 覆盖是否生效见 SYNC-GATE.md 手工项'))
 
 
 def main():

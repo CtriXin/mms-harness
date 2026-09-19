@@ -63,6 +63,8 @@ git diff --name-status $UB..HEAD | awk '{print $1}' | sort | uniq -c
 
 截至交接：**52 个文件改动 = 27 新增 + 25 修改，而 25 个修改全部是 upstream 既有文件，`mms/` 之外的自有新增 package 数是 0。**
 
+> 2026-09-19 更新：这 25 处中，有 20 处已挪进自有包 `packages/client/ui-mms`（slot 优先级覆盖），对应的上游文件已还原为原版。现在上游文件的改动只剩 7 个，登记在 `UPSTREAM-PATCHES.md`。下面这张表保留作为交接时的记录。
+
 三个能力就改到了这些地方，按危险程度排：
 
 | 改到的东西 | 为什么危险 |

@@ -5,6 +5,7 @@
  */
 import { createElement } from 'react'
 import type { ReactElement } from 'react'
+import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryListing } from '@deepseek-ai/dsh-api-remotes/client'
 import type { Translate } from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the owner contract of the directory-flow holes.
@@ -30,8 +31,11 @@ export interface BrowseFlowInjected {
  * @param props - owner conversation plus the injected browse face.
  * @returns the dialog element (renders nothing while closed).
  */
-export function BrowseDirectoryFlow(props: DirectoryFlowOwnerProps & BrowseFlowInjected): ReactElement {
+export function BrowseDirectoryFlow(props: DirectoryFlowOwnerProps & BrowseFlowInjected & Pick<PropsRuntime<'conversation.hero.workspace.directoryFlow'>, 'useWorkspaces'>): ReactElement {
+  const projects = props.useWorkspaces(snapshot => snapshot.items)
   return createElement(DirectoryBrowser, {
+    recentDirectories: [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map(project => ({ name: project.title, path: project.path })),
     open: props.open,
     busy: props.busy,
     listDirectory: props.listDirectory,

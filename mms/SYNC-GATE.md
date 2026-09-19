@@ -18,9 +18,9 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 
 | ID | 能力项 | 怎么验 | 通过标准 | 不证明什么 |
 |---|---|---|---|---|
-| O1 | C01/C02 | `mms/adapter/test_config.py` | 12 项全过：凭据缺失、bundle 审批和 hash、能力与协议、隔离环境 | 不发真实请求 |
+| O1 | C01/C02 | `mms/adapter/test_config.py` | 14 项全过：凭据缺失、bundle 审批和 hash、能力与协议、隔离环境、默认 effort 写入 settings、`mms-ui` 行按文件路径加载 | 不发真实请求 |
 | O2 | C03/C02 | `test_plugin.mjs` + `test_observe.mjs`，插件取**当前源码**，依赖取固定版本 runtime | 3 项全过：Recipe 能力要求 fail closed，evidence 不记 prompt 和 key | 不走真实 UI |
-| O3 | C14.01/.02、C12 | vitest 跑 fork 改过的三个 client 包 | 全过（2026-09-18 为 12 个文件、182 项） | 只测组件，不测和 host 的连接 |
+| O3 | C14.01/.02、C12、C15 | vitest 跑自有覆盖包 `packages/client/ui-mms`，外加它所覆盖的三个上游包（原样未改）的测试 | 全过（2026-09-19 为 16 个文件、296 项，其中 `ui-mms` 4 个文件、120 项） | 只测组件，不测和 host 的连接 |
 | O6 | C07.01–.03 | `mms/adapter/test_remote.mjs`：真实 socket + 替身 DSH | 13 项全过：无口令 / 非法 Host / 跨源 / 旧口令被拒且不到达 DSH；WebSocket 需要 cookie；DSH cookie 不外泄；只有 manifest 和 icon 不需要口令；扫码页只对本机 + 有效 nonce；`/remote` 输出不含口令 | 不测真实手机，也不测 LAN 绑定（绑定见 `REMOTE.md` 端到端记录） |
 | O7 | C13.03 | `mms/adapter/test_stop.mjs` | 5 项全过：用户停止先 kill 本 agent 仍在跑的 job 再照常取消；其他原因的取消不 kill；kill 失败不挡停止；不重复包装 | 不证明上游仍调用 `agent.cancel({kind:'user'})`，那条由 L5 兜底 |
 | O4 | — | 当前 HEAD 对 `upstream/master` merge-base 的 diff，逐文件对照 `UPSTREAM-PATCHES.md` | 改到的上游文件全部已登记 | 不判断改动内容对不对 |
@@ -32,6 +32,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 | L4 | C01.02 | 删掉所选通道的凭据 ref，再发请求 | 退出码非 0、`MISSING_CREDENTIAL`、**0 次请求** | 不测真实 HOME 或 Keychain 回退（隔离环境里本来就没有） |
 | L5 | C13.03 / C08.07 | W1 同一实例上，按浏览器的方式调 `session/create` → `session/prompt`（让模型后台跑 `sleep 25 && echo > 标记`）→ 看到 job 进程后调 `session/cancel` → 等 35 s | 标记文件没写、job 进程不在、停止后 0 次成功模型请求（没有被唤醒开新回合） | 依赖模型按提示用后台 job；模型不起 job 时判 FAIL 而不是通过。2026-09-18 端到端 mutation：去掉 `mms-stop` 后 L5 变红（标记写出、停止后 2 次请求） |
 | W1 | C10/C15 | 在 61000–62000 随机端口启动 Web，带 cookie 打开 token URL | 页面标题是 `MMS Harness`，client 产物数 > 0 | 只证明 fork 前端能被固定版本的 host 服务出来，不证明 UI 行为 |
+| W2 | C12、C14.01、C15 | 同一实例上取 `/plugins/@deepseek-ai/dsh-client-ui-mms/client.js` | 200，且覆盖的三个 slot 名都在包里 | 不证明覆盖真的生效：入口渲染时崩溃会悄悄退回上游，所以要做手工项 1–2 |
 
 L 和 W 两层只读 `~/.config/mms-next`，临时目录里的凭据副本在 gate 结束时删除。进程只停 gate 自己启动的 PID。
 
@@ -39,8 +40,9 @@ L 和 W 两层只读 `~/.config/mms-next`，临时目录里的凭据副本在 ga
 
 在 W1 启动的实例或本机 3092 上，逐项做完后记进同步分支的 PR 描述：
 
-1. 新会话 →「添加工作区」→ 输入一个已有项目名，能搜到。输入一个不存在的路径，报错，**不会**沿用旧目录（C14.01/.02）。
-2. 模型选择器 → 搜 `gpt`，能看到通道名；选中后 effort 菜单只列出这个模型真正支持的档位（C12）。
+1. 新会话 →「添加工作区」→ 标题是「找到你的项目」，输入框已聚焦。输入一个已有项目名，能搜到。输入一个不存在的路径，报错，**不会**沿用旧目录（C14.01/.02）。
+2. 模型按钮旁边有**独立的 effort 按钮**；点它直接列出档位，当前档位被勾选（C12）。模型面板打开即聚焦搜索框，搜 `gpt` 能看到通道名。看到的如果是上游样式（模型和 effort 合在一个按钮上），说明 `ui-mms` 的入口崩溃后退回了上游，去看浏览器控制台里的 `slot entry crashed`。
+   侧栏品牌名是「MMS Harness」；如果变成「DSH 本地构建」，说明覆盖没有加载。
 3. 390×844 视口下，上面两个弹窗都在屏幕内，`document.scrollWidth == 390`。
 
 ## 同步流程

@@ -62,7 +62,10 @@ def main():
         # Capture privately in memory, never print secret-bearing stdout.
         reader = "const fs=require('node:fs');const yaml=require('js-yaml');process.stdout.write(JSON.stringify(yaml.load(fs.readFileSync(process.argv[1],'utf8'))));"
         previous = json.loads(subprocess.check_output([str(node), '-e', reader, str(credential_file)], cwd=runtime, text=True))
-    data = configure(root, instance, args.model, plugin_dir/'plugin.mjs', previous)
+    # install.py places the fork-only UI package beside the upstream ones.
+    overlay = runtime / 'node_modules/@deepseek-ai/dsh-client-ui-mms'
+    data = configure(root, instance, args.model, plugin_dir/'plugin.mjs', previous,
+                     overlay if (overlay/'lib/index.js').is_file() else None)
     recipe = {'format': 'mms-work-recipe-v2', 'title': '任务整理示例',
         'prompt': '请把以下目标整理为三条可执行步骤，直接回复，不调用工具：{{goal}}',
         'variables': ['goal'], 'modelRequirements': {'image': False, 'reasoning': False}}

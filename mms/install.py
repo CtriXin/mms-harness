@@ -28,7 +28,7 @@ def main():
         parser.error('Installation cannot write MMS configuration')
     if root.exists():
         parser.error('Destination exists; choose a fresh directory to preserve the previous installation')
-    packages = ['ui-model-selection', 'ui-directory-picker-browse']
+    packages = ['ui-mms']
     for name in packages:
         if not (ROOT/'packages/client'/name/'lib/client.js').is_file():
             parser.error('Build the fork first: missing '+name)
@@ -60,7 +60,13 @@ def main():
         package = json.loads(package_path.read_text())
         destination = runtime/'node_modules'/package['name']/'lib'
         if not destination.is_dir():
-            continue
+            # Fork-only client packages (never published) are added beside
+            # the upstream ones; anything else absent from the runtime is skipped.
+            if not (package.get('private') and 'client' in package.get('dsh', {})):
+                continue
+            destination.mkdir(parents=True)
+            shutil.copy2(package_path, destination.parent/'package.json')
+            shutil.copy2(package_path.parent/'lib/index.js', destination/'index.js')
         for artifact in sorted((package_path.parent/'lib').glob('client*.js*')):
             shutil.copy2(artifact, destination/artifact.name)
             artifacts[package['name']+'/'+artifact.name] = hashlib.sha256(artifact.read_bytes()).hexdigest()

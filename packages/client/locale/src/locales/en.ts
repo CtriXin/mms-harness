@@ -30,7 +30,7 @@ export const en = {
   'collapse': 'Collapse',
   'expand': 'Expand',
   'back': 'Back',
-  'brand.localBuild': 'MMS Harness',
+  'brand.localBuild': 'DSH Local Build',
   'unknown': 'Unknown',
   'none': 'None',
   'truncated': 'Truncated',
