@@ -22,8 +22,10 @@ async function setup() {
   writeFileSync(tokenFile, TOKEN + '\n');
   const seen = [];
   const sockets = new Set();
+  const hooks = { onRequest: () => {} };
   const dsh = createServer((req, res) => {
     seen.push({ url: req.url, headers: req.headers });
+    hooks.onRequest(req);
     res.setHeader('set-cookie', ['dsh-auth-x=leak; HttpOnly', 'theme=dark']);
     res.end('from-dsh');
   });
@@ -44,7 +46,7 @@ async function setup() {
     for (const server of [gateway, dsh]) { server.closeAllConnections(); server.close(); }
     rmSync(dir, { recursive: true, force: true });
   };
-  return { port, dshPort, seen, tokenFile, close };
+  return { port, dshPort, seen, tokenFile, close, hooks };
 }
 
 function get(port, path, headers = {}, method = 'GET') {
@@ -148,6 +150,30 @@ test('rotating the token file cuts existing cookies immediately', async () => {
     assert.equal((await get(t.port, '/', { cookie: `${COOKIE}=${TOKEN}` })).status, 200);
     writeFileSync(t.tokenFile, 'rotated-' + 'b'.repeat(40));
     assert.equal((await get(t.port, '/', { cookie: `${COOKIE}=${TOKEN}` })).status, 401);
+  } finally { t.close(); }
+});
+
+test('the client that runs /remote rotate gets the new cookie; everyone else is cut off', async () => {
+  const t = await setup();
+  const next = 'rotated-' + 'c'.repeat(40);
+  try {
+    // An ordinary command that leaves the token alone hands out nothing.
+    let res = await get(t.port, '/api/commands/execute', { cookie: `${COOKIE}=${TOKEN}` }, 'POST');
+    assert.equal(res.status, 200);
+    assert.ok(!(res.headers['set-cookie'] ?? []).some(c => c.startsWith(COOKIE)));
+    // The rotate command rewrites the token while this request is in flight.
+    t.hooks.onRequest = req => { if (req.url === '/api/commands/execute') writeFileSync(t.tokenFile, next); };
+    res = await get(t.port, '/api/commands/execute', { cookie: `${COOKIE}=${TOKEN}` }, 'POST');
+    const handed = (res.headers['set-cookie'] ?? []).find(c => c.startsWith(`${COOKIE}=`));
+    assert.match(handed, new RegExp(`^${COOKIE}=${next}; Path=/; HttpOnly; SameSite=Lax`));
+    assert.ok(!(res.headers['set-cookie'] ?? []).some(c => /dsh-auth/.test(c)));
+    t.hooks.onRequest = () => {};
+    assert.equal((await get(t.port, '/', { cookie: `${COOKIE}=${next}` })).status, 200);
+    assert.equal((await get(t.port, '/', { cookie: `${COOKIE}=${TOKEN}` })).status, 401);
+    // Other paths never trigger a handoff, even if the token changes meanwhile.
+    t.hooks.onRequest = () => writeFileSync(t.tokenFile, TOKEN);
+    res = await get(t.port, '/other', { cookie: `${COOKIE}=${next}` });
+    assert.ok(!(res.headers['set-cookie'] ?? []).some(c => c.startsWith(COOKIE)));
   } finally { t.close(); }
 });
 

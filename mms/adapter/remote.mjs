@@ -173,9 +173,23 @@ export function createGateway({ upstream, upstreamAuth, allowedHosts, readToken,
       return res.end();
     }
     if (verdict.status) return deny(req, res, verdict);
+    // `/remote rotate` typed on a phone runs through here: the token changes
+    // while its request is in flight. That one client gets the new cookie, so
+    // rotating from a device does not log that device out (C07.04); every
+    // other cookie and link still dies at once.
+    const tokenBefore = parsed.pathname === '/api/commands/execute' ? readToken() : undefined;
     const forward = httpRequest({ host: target.hostname, port: target.port, method: req.method, path: req.url,
       headers: upstreamHeaders(req.headers, upstreamHost, upstreamAuth()) }, upstreamRes => {
-      res.writeHead(upstreamRes.statusCode, responseHeaders(upstreamRes.headers, upstreamHost));
+      const headers = responseHeaders(upstreamRes.headers, upstreamHost);
+      if (tokenBefore !== undefined) {
+        let now;
+        try { now = readToken(); } catch { now = tokenBefore; }
+        if (now && now !== tokenBefore) {
+          headers['set-cookie'] = [...[].concat(headers['set-cookie'] ?? []), `${COOKIE}=${now}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`];
+          log(`rotate-handoff ${where(req)}`);
+        }
+      }
+      res.writeHead(upstreamRes.statusCode, headers);
       upstreamRes.pipe(res);
     });
     forward.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });

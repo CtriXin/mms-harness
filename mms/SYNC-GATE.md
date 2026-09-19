@@ -21,7 +21,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 | O1 | C01/C02 | `mms/adapter/test_config.py` | 14 项全过：凭据缺失、bundle 审批和 hash、能力与协议、隔离环境、默认 effort 写入 settings、`mms-ui` 行按文件路径加载 | 不发真实请求 |
 | O2 | C03/C02 | `test_plugin.mjs` + `test_observe.mjs`，插件取**当前源码**，依赖取固定版本 runtime | 3 项全过：Recipe 能力要求 fail closed，evidence 不记 prompt 和 key | 不走真实 UI |
 | O3 | C14.01/.02、C12、C15 | vitest 跑自有覆盖包 `packages/client/ui-mms`，外加它所覆盖的三个上游包（原样未改）的测试 | 全过（2026-09-19 为 16 个文件、296 项，其中 `ui-mms` 4 个文件、120 项） | 只测组件，不测和 host 的连接 |
-| O6 | C07.01–.03 | `mms/adapter/test_remote.mjs`：真实 socket + 替身 DSH | 13 项全过：无口令 / 非法 Host / 跨源 / 旧口令被拒且不到达 DSH；WebSocket 需要 cookie；DSH cookie 不外泄；只有 manifest 和 icon 不需要口令；扫码页只对本机 + 有效 nonce；`/remote` 输出不含口令 | 不测真实手机，也不测 LAN 绑定（绑定见 `REMOTE.md` 端到端记录） |
+| O6 | C07.01–.04 | `mms/adapter/test_remote.mjs`：真实 socket + 替身 DSH | 14 项全过：执行 `/remote rotate` 的那个设备拿到新 cookie、其他设备立即失效；无口令 / 非法 Host / 跨源 / 旧口令被拒且不到达 DSH；WebSocket 需要 cookie；DSH cookie 不外泄；只有 manifest 和 icon 不需要口令；扫码页只对本机 + 有效 nonce；`/remote` 输出不含口令 | 不测真实手机，也不测 LAN 绑定（绑定见 `REMOTE.md` 端到端记录） |
 | O7 | C13.03 | `mms/adapter/test_stop.mjs` | 5 项全过：用户停止先 kill 本 agent 仍在跑的 job 再照常取消；其他原因的取消不 kill；kill 失败不挡停止；不重复包装 | 不证明上游仍调用 `agent.cancel({kind:'user'})`，那条由 L5 兜底 |
 | O8 | C13.15 | `mms/adapter/test_plan.mjs` | 7 项全过：计划模式只放行 6 个只读工具，其他全部拒绝且拒绝原因写明 `/plan off` 和「不是 OS sandbox」；非计划模式和其他 agent 不受影响；plan 状态读不到时放行并记日志 | 不证明 host 真的加载了插件，那条由 W3 和 L6 兜底 |
 | O9 | C13.06/.07 | `mms/adapter/test_btw.mjs` | 6 项全过：projection 只收人和模型的文字、限 12 条、截断、打码；请求用会话最近的主路由；卡片写明模型和用量；失败和未发请求都如实说 | 不发真实请求 |
