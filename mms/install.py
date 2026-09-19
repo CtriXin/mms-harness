@@ -74,7 +74,7 @@ def main():
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     private_json(root/'installation.json', {
         'schema': 'mms.harness.installation.v1', 'dsh_version': DSH_VERSION,
-        'fork': 'CtriXin/mms-harness', 'source_commit': commit, 'client_artifacts': artifacts,
+        'fork': 'CtriXin/mms-harness', 'source_commit': commit, 'source_repo': str(ROOT), 'client_artifacts': artifacts,
         'python': sys.executable, 'node': str(node), 'runtime': str(runtime),
         'instance': str(root/'instance'), 'mms_root': str(args.mms_root.expanduser().resolve()),
         'workspace': str(root/'workspace'), 'model': 'deepseek-v4-flash', 'port': args.port,

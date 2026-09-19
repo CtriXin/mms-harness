@@ -15,7 +15,7 @@
 - 原版 **T**：存在 source/test，尚缺对应执行证据。**缺口**：已有记录明确保留验收缺口，待当前源码重核。**候选**：未合并或未采用，不能冒充已交付。
 - 每项引用 E 编号；精确证据与限制见 [证据索引](MIGRATION-EVIDENCE.md)。R 中仅引用 E17 的项要特别区分“当前 fork 已验”和“旧 MMS 独立验收”。
 
-当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 19、部分 31、未迁 133、未验 7、待核对 3。不能把这些项简单相加成产品完成百分比。
+当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 24、部分 33、未迁 126、未验 7、待核对 3。不能把这些项简单相加成产品完成百分比。
 
 ## 能力总览
 
@@ -184,7 +184,7 @@
 - [ ] **C07.04 开启远程或轮换 token 后当前窗口不断登录**（原版 R；fork：部分，本机窗口始终不受影响、服务重启后远端 cookie 保持已实测，轮换后远端旧 cookie 立即 401；应用内轮换未做；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：当前窗口 cookie 正确更新，旧 token/无 cookie 拒绝。
 - [ ] **C07.05 外网使用引导位于远程总开关下**（原版 P；fork：部分，`remote status` 与 REMOTE.md 给出 Tailscale / 隧道引导，未实测跨网；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：说明实际可用入口；不能把引导当成已部署公网隧道。
 - [ ] **C07.06 移动端弹层、visualViewport 与软键盘适配**（原版 P；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：390px 已验目录/effort；真实手机键盘和内置浏览器仍需独立验收。
-- [ ] **C07.07 远程模式下升级/回滚认证保持**（原版 R；fork：未迁；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：guardian仅用当前实例token，拒绝其他凭据/代理/重定向。
+- [ ] **C07.07 远程模式下升级/回滚认证保持**（原版 R；fork：部分，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：升级和回滚都带上 remote/ 口令，手机不用重新扫码；开着远程时的端到端未测；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：guardian仅用当前实例token，拒绝其他凭据/代理/重定向。
 
 <a id="c08"></a>
 ## C08 · 会话历史、CLI adoption 与失败接续
@@ -256,13 +256,13 @@
 
 回归入口：[tests/test_mms_web_update_transaction.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_update_transaction.py)；[tests/test_mms_web_update_safety.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_update_safety.py)；[tests/test_mms_web_update_auth_transport.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_update_auth_transport.py)。路径按新布局核对；此处不等同本轮执行。
 
-- [ ] **C11.01 运行版本、安装版本、前端bundle版本一致**（原版 R；fork：部分；[E10](MIGRATION-EVIDENCE.md#e10)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：fork当前commit一致；长期version.json与升级后标记仍待迁。
-- [ ] **C11.02 检查更新及Stable/Preview选择**（原版 R；fork：未迁；[E09](MIGRATION-EVIDENCE.md#e09)、[E10](MIGRATION-EVIDENCE.md#e10)）。验收：切通道不被版本大小比较误报已最新；不伪称自动5→4降级。
-- [ ] **C11.03 完整升级确认步骤、影响说明、取消返回**（原版 R；fork：未迁；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：关键确认需真点击；effect接线断开时回归能检出。
-- [ ] **C11.04 ready后才切换安装和服务，保持原端口**（原版 R；fork：未迁；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：未就绪不替换，切换后普通URL加载正确bundle。
-- [ ] **C11.05 失败回滚与会话/配置备份**（原版 R；fork：未迁；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：回退过程也鉴权；原会话和用户配置保持。
-- [ ] **C11.06 version.json记录实际安装目标与正确根目录**（原版 R；fork：未迁；[E09](MIGRATION-EVIDENCE.md#e09)、[E10](MIGRATION-EVIDENCE.md#e10)）。验收：不写错暂存目录，不把损坏metadata当成功。
-- [ ] **C11.07 升级检查绕过环境代理并拒绝重定向**（原版 R；fork：未迁；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：凭据不外送；只读取当前实例状态，missing token不降级。
+- [x] **C11.01 运行版本、安装版本、前端bundle版本一致**（原版 R；fork：已验，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：只装从当前代码构建的产物，切换后校验页面标题和 ui-mms；[E10](MIGRATION-EVIDENCE.md#e10)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：fork当前commit一致；长期version.json与升级后标记仍待迁。
+- [ ] **C11.02 检查更新及Stable/Preview选择**（原版 R；fork：部分，`upgrade --check` 对比已安装、源码和远端 commit；fork 只有 `mms` 一条线，没有 Stable/Preview；[E09](MIGRATION-EVIDENCE.md#e09)、[E10](MIGRATION-EVIDENCE.md#e10)）。验收：切通道不被版本大小比较误报已最新；不伪称自动5→4降级。
+- [ ] **C11.03 完整升级确认步骤、影响说明、取消返回**（原版 R；fork：部分，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：终端里列出改动和影响、输入 y 才继续，其他输入取消且不动安装；应用内入口未做；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：关键确认需真点击；effect接线断开时回归能检出。
+- [x] **C11.04 ready后才切换安装和服务，保持原端口**（原版 R；fork：已验，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：新版本先带会话副本在空闲端口预检，通过才切换；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：未就绪不替换，切换后普通URL加载正确bundle。
+- [x] **C11.05 失败回滚与会话/配置备份**（原版 R；fork：已验，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：切换后未就绪自动恢复原安装；rollback 带上当前会话；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：回退过程也鉴权；原会话和用户配置保持。
+- [x] **C11.06 version.json记录实际安装目标与正确根目录**（原版 R；fork：已验，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：installation.json 原子写入，切换后路径改写到最终目录；[E09](MIGRATION-EVIDENCE.md#e09)、[E10](MIGRATION-EVIDENCE.md#e10)）。验收：不写错暂存目录，不把损坏metadata当成功。
+- [x] **C11.07 升级检查绕过环境代理并拒绝重定向**（原版 R；fork：已验，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：探测只连 127.0.0.1、忽略环境代理、拒绝跨主机重定向；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：凭据不外送；只读取当前实例状态，missing token不降级。
 - [ ] **C11.08 跨布局升级提前拒绝与双线重装指引**（原版 R；fork：未迁；[E22](MIGRATION-EVIDENCE.md#e22)）。验收：staging和install真实consumer两处拒绝flat候选，拒绝发生在probe/backup/关闭会话/cutover之前；保留当前安装、会话和端口，指向正确Stable/Preview目标安装器；两个caller独立mutation必须检出，不强行混装。
 
 <a id="c12"></a>

@@ -25,6 +25,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 | O7 | C13.03 | `mms/adapter/test_stop.mjs` | 5 项全过：用户停止先 kill 本 agent 仍在跑的 job 再照常取消；其他原因的取消不 kill；kill 失败不挡停止；不重复包装 | 不证明上游仍调用 `agent.cancel({kind:'user'})`，那条由 L5 兜底 |
 | O8 | C13.15 | `mms/adapter/test_plan.mjs` | 7 项全过：计划模式只放行 6 个只读工具，其他全部拒绝且拒绝原因写明 `/plan off` 和「不是 OS sandbox」；非计划模式和其他 agent 不受影响；plan 状态读不到时放行并记日志 | 不证明 host 真的加载了插件，那条由 W3 和 L6 兜底 |
 | O9 | C13.06/.07 | `mms/adapter/test_btw.mjs` | 6 项全过：projection 只收人和模型的文字、限 12 条、截断、打码；请求用会话最近的主路由；卡片写明模型和用量；失败和未发请求都如实说 | 不发真实请求 |
+| O10 | C11.01/.06/.07 | `mms/adapter/test_upgrade.py` | 6 项全过：只认从当前代码构建、带 MMS 标题、非 dirty 的产物（`mms/` 改动不需要重建）；探测绕过环境代理、拒绝跳出 127.0.0.1 的重定向；切换后路径和端口指向最终目录 | 不跑真实安装，那条由 L8 覆盖 |
 | O4 | — | 当前 HEAD 对 `upstream/master` merge-base 的 diff，逐文件对照 `UPSTREAM-PATCHES.md` | 改到的上游文件全部已登记 | 不判断改动内容对不对 |
 | O5 | — | `--build`：`DSH_CLIENT_TITLE="MMS Harness" pnpm run build` | 退出码 0 | — |
 | L0 | C10 | `mms/install.py` 把当前 build 装进临时目录（runtime 从 `--runtime-from` 复制并核对 lock） | 安装成功 | 不覆盖、也不测已安装的 3092 实例 |
@@ -35,6 +36,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 | W3 | — | 读 W1 实例的启动日志 | 没有任何 `mms-*` 插件停在 pending | 2026-09-19 抓到过：插件 inject 的服务在 host 上拿不到，就会一直 pending、没有任何报错 |
 | L6 | C13.15 | W1 同一实例：`commands/execute /plan` → 让模型用 bash 看目录 → 解会话日志 → `/plan off` → 再看一次 | 计划模式里每次 bash 都被 MMS 规则拒绝，关闭后 bash 成功 | 让模型写文件证明不了什么：模型遵守计划指引根本不调用工具（2026-09-19 mutation）。需要 `zstd` 命令行解日志 |
 | L7 | C13.06/.07 | 主任务前台 `sleep 20 && touch 标记` 期间发 `/btw` 问之前让它记住的暗号 | 旁问成功、答出暗号、写明回答模型；发问时主任务还在跑；标记最终写出 | 不测取消旁问与主任务互不影响 |
+| L8 | C11.03–.06 | 临时目录装一份并标成上一个 commit、启动、写会话和工作区标记 → `upgrade --no-build --yes` → 写新会话数据 → `rollback --yes` → 塞一个缺 runtime 的坏版本做切换 | 升级后是新 commit、标记还在、同一端口在跑、有 before 备份；回滚后是旧 commit、升级后写的数据也带回来了；坏版本切换失败后自动恢复原安装并在同一端口运行 | mutation（2026-09-19）：去掉切换时的数据拷贝后升级和回滚都变红 |
 | L5 | C13.03 / C08.07 | W1 同一实例上，按浏览器的方式调 `session/create` → `session/prompt`（让模型后台跑 `sleep 25 && echo > 标记`）→ 看到 job 进程后调 `session/cancel` → 等 35 s | 标记文件没写、job 进程不在、停止后 0 次成功模型请求（没有被唤醒开新回合） | 依赖模型按提示用后台 job；模型不起 job 时判 FAIL 而不是通过。2026-09-18 端到端 mutation：去掉 `mms-stop` 后 L5 变红（标记写出、停止后 2 次请求） |
 | W1 | C10/C15 | 在 61000–62000 随机端口启动 Web，带 cookie 打开 token URL | 页面标题是 `MMS Harness`，client 产物数 > 0 | 只证明 fork 前端能被固定版本的 host 服务出来，不证明 UI 行为 |
 | W2 | C12、C14.01、C15 | 同一实例上取 `/plugins/@deepseek-ai/dsh-client-ui-mms/client.js` | 200，且覆盖的三个 slot 名都在包里 | 不证明覆盖真的生效：入口渲染时崩溃会悄悄退回上游，所以要做手工项 1–2 |

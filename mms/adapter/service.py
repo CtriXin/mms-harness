@@ -150,6 +150,10 @@ def remote_command(root, config, args, dsh_url):
 
 
 def main():
+    # upgrade / rollback run as their own program: they stop and restart this service.
+    if len(sys.argv)>1 and sys.argv[1] in ('upgrade','rollback'):
+        rest=sys.argv[2:]+(['--rollback'] if sys.argv[1]=='rollback' else [])
+        os.execv(sys.executable,[sys.executable,str(Path(__file__).with_name('upgrade.py')),*rest])
     parser=argparse.ArgumentParser()
     parser.add_argument('action',choices=['start','stop','status','open','remote'],nargs='?',default='open')
     parser.add_argument('remote_action',nargs='?',choices=['status','on','off','rotate','add-host','remove-host'],default='status')

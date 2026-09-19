@@ -76,6 +76,8 @@ def offline(node: Path, build: bool, runtime_from: Path):
     env = clean_env(node)
     out = run([sys.executable, '-m', 'pytest', '-q', 'test_config.py'], cwd=ADAPTER, env=env)
     record('O1 adapter config (C01/C02)', 'PASS' if out.returncode == 0 else 'FAIL', out.stdout.strip().splitlines()[-1:][0] if out.stdout.strip() else out.stderr[-300:])
+    out = run([sys.executable, '-m', 'pytest', '-q', 'test_upgrade.py'], cwd=ADAPTER, env=env)
+    record('O10 upgrade guards (C11.01/.06/.07)', 'PASS' if out.returncode == 0 else 'FAIL', out.stdout.strip().splitlines()[-1:][0] if out.stdout.strip() else out.stderr[-300:])
     # The plugin imports @deepseek-ai/dsh-llm: load the current source next to a
     # link to the pinned runtime's node_modules, never from the installed copy.
     with tempfile.TemporaryDirectory(prefix='mms-gate-plugin-') as tmp:
@@ -156,6 +158,67 @@ def ok_requests(evidence):
     return bool(evidence) and evidence[-1].get('status') == 200
 
 
+def upgrade_check(node: Path, mms_root: Path, runtime_from: Path, tmp: Path):
+    """L8: upgrade keeps sessions/workspace/port, rollback brings them back, a broken candidate is undone."""
+    check = 'L8 C11.03-.06 upgrade, rollback, failed upgrade restores'
+    sys.path.insert(0, str(ADAPTER))
+    import upgrade as up
+    root = tmp / 'upgrade' / 'mms-harness'
+    port = random.randint(61000, 62000)
+    python = sys.executable
+    def status():
+        out = run([python, str(root / 'source/mms/adapter/service.py'), 'status', f'--installation={root}'])
+        return json.loads(out.stdout) if out.returncode == 0 else {}
+    def commit():
+        return json.loads((root / 'installation.json').read_text())['source_commit']
+    try:
+        root.parent.mkdir()
+        out = run([python, str(ROOT / 'mms/install.py'), '--destination', str(root), '--mms-root', str(mms_root),
+                   '--node', str(node), '--runtime-from', str(runtime_from), '--port', str(port)], env=clean_env(node))
+        if out.returncode:
+            raise RuntimeError('install: ' + out.stderr[-300:])
+        head = commit()
+        older = run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD~1']).stdout.strip()
+        config = json.loads((root / 'installation.json').read_text())
+        config['source_commit'] = older  # pretend the installed build is one commit behind
+        (root / 'installation.json').write_text(json.dumps(config))
+        ok, detail = up.ready(root)
+        if not ok:
+            raise RuntimeError('first start: ' + detail)
+        for name in ('instance', 'workspace'):
+            (root / name / 'gate-marker.txt').write_text(name)
+        out = run([python, str(ADAPTER / 'upgrade.py'), '--installation', str(root), '--from', str(ROOT), '--no-build', '--yes'],
+                  env=clean_env(node), timeout=900)
+        markers = lambda: all((root / n / 'gate-marker.txt').exists() for n in ('instance', 'workspace'))
+        up_ok = out.returncode == 0 and commit() == head and markers() and status().get('url', '').startswith(f'http://127.0.0.1:{port}/')
+        backup = root.parent / f'mms-harness-before-{head[:10]}'
+        up_ok = up_ok and backup.is_dir()
+        detail = f'upgrade={"ok" if up_ok else "FAIL " + (out.stdout + out.stderr)[-200:]}'
+        (root / 'instance' / 'after-upgrade.txt').write_text('new session data')
+        out = run([python, str(ADAPTER / 'upgrade.py'), '--installation', str(root), '--rollback', '--yes'],
+                  env=clean_env(node), timeout=900)
+        back_ok = (out.returncode == 0 and commit() == older and markers() and (root / 'instance/after-upgrade.txt').exists()
+                   and status().get('url', '').startswith(f'http://127.0.0.1:{port}/'))
+        detail += f' rollback={"ok" if back_ok else "FAIL " + (out.stdout + out.stderr)[-200:]}'
+        # A candidate whose runtime is missing cannot start: the swap must put the running version back.
+        broken = root.parent / 'broken'
+        shutil.copytree(root, broken, symlinks=True, ignore=shutil.ignore_patterns('runtime', 'instance', 'workspace', 'remote', 'service.*'))
+        bad = json.loads((broken / 'installation.json').read_text())
+        bad['runtime'] = str(broken / 'runtime')
+        (broken / 'installation.json').write_text(json.dumps(bad))
+        ok, message = up.swap_in(root, broken, root.parent / 'mms-harness-before-broken', port)
+        restore_ok = (not ok and commit() == older and markers()
+                      and status().get('url', '').startswith(f'http://127.0.0.1:{port}/'))
+        detail += f' broken_candidate={"restored" if restore_ok else "FAIL " + message[-200:]}'
+        record(check, 'PASS' if up_ok and back_ok and restore_ok else 'FAIL', detail)
+    except (OSError, RuntimeError, KeyError, ValueError, subprocess.TimeoutExpired) as e:
+        record(check, 'FAIL', str(e)[:300])
+    finally:
+        for candidate in root.parent.glob('mms-harness*'):
+            if (candidate / 'installation.json').exists():
+                run([python, str(candidate / 'source/mms/adapter/service.py'), 'stop', f'--installation={candidate}'])
+
+
 def live(node: Path, mms_root: Path, runtime_from: Path, keep: bool):
     tmp = Path(tempfile.mkdtemp(prefix='mms-sync-gate-'))
     dest = tmp / 'install'
@@ -201,6 +264,7 @@ def live(node: Path, mms_root: Path, runtime_from: Path, keep: bool):
         inst.credentials.write_text(inst.pristine_credentials)
 
         web_smoke(inst)
+        upgrade_check(node, mms_root, runtime_from, tmp)
     finally:
         if keep:
             print(f'kept: {tmp}')
