@@ -235,7 +235,7 @@ def web_smoke(inst: Instance):
         record('W1 Web boots with fork client', 'PASS' if passed else 'FAIL',
                f'port={port} title={title.group(1) if title else None!r} artifacts={len(installed["client_artifacts"])}; UI 行为见 SYNC-GATE.md 手工项')
         if passed:
-            overlay_check(opener, f'http://127.0.0.1:{port}')
+            overlay_check(opener, f'http://127.0.0.1:{port}', html)
             stop_check(inst, opener, f'http://127.0.0.1:{port}')
     finally:
         proc.terminate()  # only the PID this gate started
@@ -286,10 +286,15 @@ def stop_check(inst: Instance, opener, base):
         record('L5 C13.03 stop kills background job, no wake', 'FAIL', str(e)[:300])
 
 
-def overlay_check(opener, base):
+def overlay_check(opener, base, html):
     """The host must serve the fork's overlay row; otherwise every cell silently falls back to upstream."""
+    # The page loads each row through the combo route with a content revision.
+    m = re.search(r'/plugins/\?\?@deepseek-ai/dsh-client-ui-mms/client\.js&(?:amp;)?rev=[\w-]+', html)
+    if not m:
+        record('W2 fork UI overlay served (ui-mms)', 'FAIL', 'page does not load @deepseek-ai/dsh-client-ui-mms')
+        return
     try:
-        body = opener.open(f'{base}/plugins/@deepseek-ai/dsh-client-ui-mms/client.js', timeout=10).read().decode()
+        body = opener.open(base + m.group(0).replace('&amp;', '&'), timeout=10).read().decode()
     except OSError as e:
         record('W2 fork UI overlay served (ui-mms)', 'FAIL', str(e)[:300])
         return
