@@ -96,6 +96,9 @@ def offline(node: Path, build: bool, runtime_from: Path):
     out = run([str(node), '--test', 'test_plan.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
     record('O8 plan mode is read-only (C13.15)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
+    out = run([str(node), '--test', 'test_default_model.mjs'], cwd=ADAPTER, env=env)
+    tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
+    record('O11 default model changes only on request (C01.06)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
     out = run([str(node), '--test', 'test_btw.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
     record('O9 /btw side question (C13.06/.07)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
@@ -313,6 +316,7 @@ def web_smoke(inst: Instance):
             overlay_check(opener, f'http://127.0.0.1:{port}', html)
             plan_check(inst, opener, f'http://127.0.0.1:{port}')
             btw_check(inst, opener, f'http://127.0.0.1:{port}')
+            default_model_check(inst, opener, f'http://127.0.0.1:{port}')
             stop_check(inst, opener, f'http://127.0.0.1:{port}')
     finally:
         proc.terminate()  # only the PID this gate started
@@ -415,6 +419,30 @@ def plan_check(inst: Instance, opener, base):
                f'bash_in_plan={len(in_plan)} all_denied_by_mms={denied} plan_off={off.get("text")!r} '
                f'bash_after_off={len(after)} ran_after_off={restored}'
                + ('' if in_plan else ' (model made no bash call in plan mode: inconclusive)'))
+    except (OSError, RuntimeError, KeyError) as e:
+        record(check, 'FAIL', str(e)[:300])
+
+
+def default_model_check(inst: Instance, opener, base):
+    """L9: switching inside a session leaves the default alone; /default-model changes it. No model requests."""
+    check = 'L9 C01.06 in-session switch keeps the default; explicit default changes it'
+    settings = inst.instance / 'home/settings.yaml'
+    other = next((r for r in inst.routes if r['rank'] == 0 and r['logical_model'] != 'deepseek-v4-flash' and r['reasoning_efforts']), None)
+    try:
+        if other is None:
+            raise RuntimeError('no second route to switch to')
+        before = settings.read_text()
+        session = rpc(opener, base, 'session/create', {'cwd': str(inst.workspace)})['sessionId']
+        rpc(opener, base, 'session/selectModel', {'sessionId': session, 'provider': other['provider'], 'model': other['model']})
+        time.sleep(1)
+        kept = settings.read_text() == before and other['provider'] not in settings.read_text()
+        wanted = {'provider': other['provider'], 'model': other['model'], 'reasoningEffort': other['reasoning_efforts'][-1]}
+        result = command(opener, base, session, '/default-model ' + json.dumps(wanted))
+        time.sleep(1)
+        after = settings.read_text()
+        changed = result.get('kind') == 'success' and other['provider'] in after and wanted['reasoningEffort'] in after
+        record(check, 'PASS' if kept and changed else 'FAIL',
+               f'switch_kept_default={kept} explicit_changed_default={changed} result={result.get("text", "")[:60]!r}')
     except (OSError, RuntimeError, KeyError) as e:
         record(check, 'FAIL', str(e)[:300])
 

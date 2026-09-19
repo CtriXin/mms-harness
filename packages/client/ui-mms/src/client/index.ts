@@ -20,7 +20,6 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ModelSelection } from '@deepseek-ai/dsh-api-session-controller/types'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 // Type-only: the ctx.modelDirectories service merge and the seat's injected face.
-import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 // Type-only: the SlotMap merges declaring the seats and holes filled here.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -29,7 +28,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { MmsBrandName } from './Brand.tsx'
 import { BrowseDirectoryFlow, type BrowseFlowInjected } from './flow.ts'
-import { ModelSelect } from './ModelSelect.tsx'
+import { ModelSelect, type MmsModelSeatInjected } from './ModelSelect.tsx'
 import { en as modelEn, zh as modelZh, type ModelKey } from './model-locales.ts'
 import { en as mmsEn, zh as mmsZh, projectsEn, projectsZh, type MmsKey } from './locales.ts'
 
@@ -60,7 +59,7 @@ export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace']
  * resolver itself injects (upstream ModelDirectoryResolver.inject), or the
  * entry crashes at render and the cell silently falls back to upstream.
  */
-const MODEL_SEAT_INJECT = ['slots', 'modelDirectories', 'sessions', 'remote', 'remote.session']
+const MODEL_SEAT_INJECT = ['slots', 'modelDirectories', 'sessions', 'remote', 'remote.session', 'remote.commands']
 
 /**
  * Client plugin body: register the dictionaries, then shadow each cell as
@@ -109,7 +108,7 @@ export function apply(ctx: ClientContext): void {
       name: 'conversation.input.model',
       locale: MODEL_NS,
       priority: PRIORITY,
-      inject: (sessionId): ModelSelectInjected => {
+      inject: (sessionId): MmsModelSeatInjected => {
         const directory = models.directoryFor(sessionId)
         const available = sessions.subagentAddress(sessionId) === undefined
         return {
@@ -121,6 +120,18 @@ export function apply(ctx: ClientContext): void {
           select: (selection: ModelSelection) => available
             ? directory.select(selection)
             : Promise.resolve(undefined),
+          // Runs the node half's /default-model (mms/adapter/plugin-default-model.mjs), like
+          // ui-plan runs /plan off: in-session switches no longer change the default (C01.06).
+          makeDefault: async (selection: ModelSelection) => {
+            try {
+              const result = await scope.remote.commands.execute(sessionId, `/default-model ${JSON.stringify(selection)}`, [])
+              if (!result.ok) return { ok: false, text: result.error.message }
+              const outcome = result.value?.result
+              return { ok: outcome?.kind === 'success', text: outcome?.text ?? '' }
+            } catch (error) {
+              return { ok: false, text: error instanceof Error ? error.message : String(error) }
+            }
+          },
         }
       },
     }, ModelSelect))

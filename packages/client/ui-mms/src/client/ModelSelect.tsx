@@ -31,6 +31,16 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client'
+
+/** Upstream's seat face plus the explicit "use for new sessions" verb (C01.06). */
+export type MmsModelSeatInjected = ModelSelectInjected & {
+  /**
+   * Make a selection the default for new sessions; in-session switches no longer do.
+   * @param selection - the session's current model and effort.
+   * @returns whether it was saved, with the Host's confirmation or failure text.
+   */
+  makeDefault: (selection: ModelSelection) => Promise<{ ok: boolean; text: string }>
+}
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -53,8 +63,8 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, t }:
-  ModelSelectInjected & { locked: boolean } & PropsLocale<'mms-model'>,
+  { locked, available, directory, load, select, makeDefault, t }:
+  MmsModelSeatInjected & { locked: boolean } & PropsLocale<'mms-model'>,
 ) {
   const state = useSyncExternalStore(
     fn => directory.subscribe(fn),
@@ -325,6 +335,20 @@ export function ModelSelect(
     void select(selection).then(settleSelection)
   }
 
+  const useAsDefault = (): void => {
+    if (state.current === null) return
+    const selection: ModelSelection = {
+      provider: state.current.provider,
+      model: state.current.model,
+      ...effectiveEffort === undefined ? {} : { reasoningEffort: effectiveEffort },
+    }
+    void makeDefault(selection).then((result) => {
+      if (result.ok && rootRef.current !== null) close(true)
+      toastSeq.current += 1
+      setToast({ seq: toastSeq.current, text: result.ok ? result.text : t('default.failed', { message: result.text }) })
+    })
+  }
+
   const waiting = state.current === null && state.status === 'loading'
   const modelLabel = waiting
     ? t('trigger.loading')
@@ -415,6 +439,12 @@ export function ModelSelect(
                   <span className={css.cellLabel}>{t('menu.effort')}</span>
                   <span className={css.cellValue}>{effortLabel}</span>
                   <IconChevronRightOutline14 className={css.cellChevron} />
+                </button>
+              )}
+              {state.current !== null && (
+                <button ref={itemRef()} type="button" role="menuitem" className={css.cell}
+                  disabled={locked || busy} onClick={useAsDefault}>
+                  <span className={css.cellLabel}>{t('menu.makeDefault')}</span>
                 </button>
               )}
             </>

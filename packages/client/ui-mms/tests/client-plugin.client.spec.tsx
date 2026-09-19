@@ -17,6 +17,7 @@ import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selec
 import { ModelDirectoryResolver } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import { apply, inject } from '../src/client/index.ts'
 import { MmsBrandName } from '../src/client/Brand.tsx'
+import type { MmsModelSeatInjected } from '../src/client/ModelSelect.tsx'
 import { apply as nodeApply } from '../src/index.ts'
 
 usePinnedBrowserLanguages('zh-CN')
@@ -43,6 +44,7 @@ async function bench({ withModels = true } = {}) {
   const createDirectory = vi.fn(async (path: string, name: string) => `${path}/${name}`)
   ctx.provide('uiWorkspace', { listDirectory, createDirectory } as never)
   ctx.provide('sessions', { subagentAddress: (id: string) => id === 'child' ? { parent: 'root' } : undefined } as never)
+  const commandsExecute = vi.fn(async (): Promise<unknown> => ({ ok: true, value: { commandId: 'c', result: { kind: 'success', text: '新会话将默认使用 m。' } } }))
   const directory = {
     store: { getSnapshot: () => ({}), subscribe: () => () => {} },
     load: vi.fn(async () => ({})),
@@ -50,8 +52,10 @@ async function bench({ withModels = true } = {}) {
   }
   const directoryFor = vi.fn(() => directory)
   if (withModels) {
-    ctx.provide('remote', {} as never)
+    // Same shape as the host (ui-plan's spec): the namespace object and its dotted service.
+    ctx.provide('remote', { commands: { execute: commandsExecute } } as never)
     ctx.provide('remote.session', {} as never)
+    ctx.provide('remote.commands', { execute: commandsExecute } as never)
     ctx.provide('modelDirectories', { directoryFor } as never)
   }
   const slots = ctx.get('slots') as SlotRegistry
@@ -62,7 +66,7 @@ async function bench({ withModels = true } = {}) {
   // The shipped occupants: default priority, as upstream registers them.
   for (const name of Object.keys(CELLS)) slots.register({ name } as never, upstream)
   const winner = (name: Cell) => slots.entriesOfSlot(name)[0]!
-  return { ctx, slots, winner, listDirectory, createDirectory, directory, directoryFor }
+  return { ctx, slots, winner, listDirectory, createDirectory, directory, directoryFor, commandsExecute }
 }
 
 describe('ui-mms client half', () => {
@@ -123,6 +127,21 @@ describe('ui-mms client half', () => {
     await expect(child.select({ provider: 'p', model: 'm' })).resolves.toBeUndefined()
     expect(b.directory.load).toHaveBeenCalledOnce()
     expect(b.directory.select).toHaveBeenCalledOnce()
+  })
+
+  it('the default action runs the node half\'s /default-model with the selection', async () => {
+    const b = await bench()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    type Face = MmsModelSeatInjected
+    const face = (b.winner('conversation.input.model').inject as unknown as (id: string) => Face)('s1')
+    await expect(face.makeDefault({ provider: 'p', model: 'm', reasoningEffort: 'low' })).resolves.toEqual({ ok: true, text: '新会话将默认使用 m。' })
+    expect(b.commandsExecute).toHaveBeenCalledWith('s1', '/default-model {"provider":"p","model":"m","reasoningEffort":"low"}', [])
+    b.commandsExecute.mockResolvedValueOnce({ ok: false, error: { message: 'offline' } })
+    await expect(face.makeDefault({ provider: 'p', model: 'm' })).resolves.toEqual({ ok: false, text: 'offline' })
+    b.commandsExecute.mockResolvedValueOnce({ ok: true, value: { commandId: 'c', result: { kind: 'error', text: 'refused' } } })
+    await expect(face.makeDefault({ provider: 'p', model: 'm' })).resolves.toEqual({ ok: false, text: 'refused' })
+    b.commandsExecute.mockRejectedValueOnce(new Error('socket closed'))
+    await expect(face.makeDefault({ provider: 'p', model: 'm' })).resolves.toEqual({ ok: false, text: 'socket closed' })
   })
 
   it('a failed catalog load stays on the store, not an unhandled rejection', async () => {

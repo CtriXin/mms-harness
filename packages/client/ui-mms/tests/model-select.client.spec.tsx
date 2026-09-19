@@ -11,6 +11,9 @@ import { ModelSelect } from '../src/client/ModelSelect.tsx'
 import { zh } from '../src/client/model-locales.ts'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 
+/** Seat verb the upstream specs never exercise; the MMS cases below do. */
+const noDefault = vi.fn(async () => ({ ok: true, text: '' }))
+
 // The seat's key domain is model ∪ common; the stub mirrors the real lookup
 // chain: package dictionary, then common vocabulary, then the key.
 const t: ComponentProps<typeof ModelSelect>['t'] = (key, params) => {
@@ -67,6 +70,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
+      makeDefault={noDefault}
       t={t}
     />)
 
@@ -109,6 +113,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+      makeDefault={noDefault}
       t={t}
     />)
 
@@ -131,6 +136,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
+      makeDefault={noDefault}
       t={t}
     />)
 
@@ -157,6 +163,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+      makeDefault={noDefault}
       t={t}
     />)
 
@@ -183,7 +190,8 @@ describe('ModelSelect reasoning effort', () => {
     const select = vi.fn(async () => {
       const error = sessionInUse
         ? new RemoteError('session/writer-held', 'writer held', { sessionId: SessionId('owned') })
-        : new RemoteError('session/model-unavailable', 'session already contains images', { provider: 'deepseek-official', model: 'deepseek-v4-pro' })
+        : new RemoteError('session/model-unavailable', 'session already contains images',
+          { provider: 'deepseek-official', model: 'deepseek-v4-pro' })
       directory.set(state({ groups, status: 'error', error: 'unrelated catalog refresh' }))
       return { ok: false as const, error }
     })
@@ -193,6 +201,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
+      makeDefault={noDefault}
       t={t}
     />)
 
@@ -219,6 +228,7 @@ describe('ModelSelect reasoning effort', () => {
         directory={createSnapshotStore(state())}
         load={vi.fn()}
         select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+        makeDefault={noDefault}
         t={t}
       />)
       const trigger = screen.getByRole('button', { name: /选择模型/ })
@@ -252,6 +262,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={createSnapshotStore(state())}
       load={load}
       select={vi.fn().mockResolvedValue(undefined)}
+      makeDefault={noDefault}
       t={t}
     />)
 
@@ -269,6 +280,7 @@ describe('ModelSelect keyboard walk', () => {
       directory={createSnapshotStore(state())}
       load={vi.fn()}
       select={select}
+      makeDefault={noDefault}
       t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
@@ -328,6 +340,7 @@ describe('ModelSelect keyboard walk', () => {
       directory={createSnapshotStore(state())}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+      makeDefault={noDefault}
       t={t}
     />)
     const trigger = screen.getByRole('button', { name: /选择模型/ })
@@ -343,9 +356,10 @@ describe('ModelSelect keyboard walk', () => {
 
   it('a backward step from outside the list enters at the last row, and a closed menu leaves Tab native', () => {
     mountOpen()
-    const [modelRow, effortRow] = screen.getAllByRole('menuitem')
+    // MMS adds "设为新会话默认" as the last root row, so the backward step lands there.
+    const [modelRow, , defaultRow] = screen.getAllByRole('menuitem')
     expect(fireEvent.keyDown(modelRow!, { key: 'ArrowUp' })).toBe(false)
-    expect(document.activeElement).toBe(effortRow)
+    expect(document.activeElement).toBe(defaultRow)
     const trigger = screen.getByRole('button', { name: /选择模型/ })
     fireEvent.keyDown(trigger, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
@@ -375,6 +389,7 @@ describe('ModelSelect keyboard walk', () => {
       directory={directory}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+      makeDefault={noDefault}
       t={t}
     />)
     const trigger = screen.getByRole('button', { name: /选择模型/ })
@@ -439,6 +454,7 @@ describe('ModelSelect keyboard walk', () => {
       directory={createSnapshotStore(state({ current: { provider: 'gone', model: 'gone' } }))}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+      makeDefault={noDefault}
       t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
@@ -454,11 +470,64 @@ describe('ModelSelect keyboard walk', () => {
 
 
 describe('MMS quick access', () => {
+  it('makes the current model and effort the default for new sessions only when asked', async () => {
+    const select = vi.fn()
+    const makeDefault = vi.fn(async () => ({ ok: true, text: '新会话将默认使用 deepseek-v4-flash · high。' }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={createSnapshotStore(state())}
+      load={vi.fn()}
+      select={select}
+      makeDefault={makeDefault}
+      t={t}
+    />)
+    const trigger = screen.getByRole('button', { name: /选择模型，当前/ })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: '设为新会话默认' }))
+    expect(makeDefault).toHaveBeenCalledWith({ provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'high' })
+    expect(select).not.toHaveBeenCalled()
+    await waitFor(() => { expect(screen.queryByRole('menu')).toBeNull() })
+    expect(screen.getByText('新会话将默认使用 deepseek-v4-flash · high。')).toBeTruthy()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('a refused default keeps the menu open and says why', async () => {
+    const makeDefault = vi.fn(async () => ({ ok: false, text: 'settings are read-only' }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={createSnapshotStore(state())}
+      load={vi.fn()}
+      select={vi.fn()}
+      makeDefault={makeDefault}
+      t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '设为新会话默认' }))
+    await waitFor(() => { expect(screen.getByText('没能设为默认：settings are read-only')).toBeTruthy() })
+    expect(screen.getByRole('menu')).toBeTruthy()
+  })
+
+  it('offers no default action before a model is known', () => {
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={createSnapshotStore(state({ current: null }))}
+      load={vi.fn()}
+      select={vi.fn()}
+      makeDefault={noDefault}
+      t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    expect(screen.queryByRole('menuitem', { name: '设为新会话默认' })).toBeNull()
+  })
+
   it('changes effort from its own trigger and returns focus only after host acceptance', async () => {
     const directory = createSnapshotStore(state())
     const result = Promise.withResolvers<{ ok: true; value: undefined }>()
     const select = vi.fn(() => result.promise)
-    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
     const trigger = screen.getByRole('button', { name: '选择推理等级，当前 High' })
     fireEvent.click(trigger)
     expect(screen.getAllByRole('menuitemradio').map(row => row.textContent))
@@ -477,7 +546,7 @@ describe('MMS quick access', () => {
       { id: 'backup', name: '备用东京', models: [{ id: 'gpt-test', name: 'GPT test' }] },
     ] }))
     const select = vi.fn(async () => ({ ok: false as const, error: new RemoteError('gateway/internal', 'offline', {}) }))
-    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
@@ -491,7 +560,15 @@ describe('MMS quick access', () => {
   })
 
   it('locks both model and effort controls together', () => {
-    render(<ModelSelect locked available directory={createSnapshotStore(state())} load={vi.fn()} select={vi.fn()} t={t} />)
+    render(<ModelSelect
+      locked
+      available
+      directory={createSnapshotStore(state())}
+      load={vi.fn()}
+      select={vi.fn()}
+      makeDefault={noDefault}
+      t={t}
+    />)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /选择推理等级/ }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /选择模型，当前/ }).disabled).toBe(true)
   })

@@ -234,6 +234,8 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
         {'insert': [{'id': 'mms-stop', 'name': str(Path(__file__).with_name('plugin-stop.mjs'))}]},
         # Plan mode is a tool boundary, not just guidance: read-only tools only (C13.15).
         {'insert': [{'id': 'mms-plan-readonly', 'name': str(Path(__file__).with_name('plugin-plan.mjs'))}]},
+        # In-session model switches stop rewriting the default for new sessions (C01.06).
+        {'insert': [{'id': 'mms-default-model', 'name': str(Path(__file__).with_name('plugin-default-model.mjs'))}]},
         # `/btw` side question (C13.06/.07). It imports @deepseek-ai/dsh-llm, so it
         # loads from the runtime copy next to plugin.mjs when run.py made one.
         {'insert': [{'id': 'mms-btw', 'name': str(Path(plugin_path or Path(__file__)).with_name('plugin-btw.mjs'))}]},
