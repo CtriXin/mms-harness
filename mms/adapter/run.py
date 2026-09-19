@@ -55,7 +55,9 @@ def main():
     workspace.mkdir(parents=True, exist_ok=True)
     plugin_dir = runtime / 'mms-plugin'
     plugin_dir.mkdir(exist_ok=True)
-    shutil.copy2(HERE/'plugin.mjs', plugin_dir/'plugin.mjs')
+    # Plugins that import runtime packages load from inside the runtime tree.
+    for plugin in ('plugin.mjs', 'plugin-btw.mjs'):
+        shutil.copy2(HERE/plugin, plugin_dir/plugin)
     previous = None
     credential_file = instance/'home/.credentials.yaml'
     if credential_file.exists():

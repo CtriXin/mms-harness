@@ -15,7 +15,7 @@
 - 原版 **T**：存在 source/test，尚缺对应执行证据。**缺口**：已有记录明确保留验收缺口，待当前源码重核。**候选**：未合并或未采用，不能冒充已交付。
 - 每项引用 E 编号；精确证据与限制见 [证据索引](MIGRATION-EVIDENCE.md)。R 中仅引用 E17 的项要特别区分“当前 fork 已验”和“旧 MMS 独立验收”。
 
-当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork：已验 15、部分 26、未迁 141、未验 8、待核对 3。不能把这些项简单相加成产品完成百分比。
+当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 19、部分 31、未迁 133、未验 7、待核对 3。不能把这些项简单相加成产品完成百分比。
 
 ## 能力总览
 
@@ -302,8 +302,8 @@
 - [ ] **C13.03 steer/interrupt与普通follow-up队列分离**（原版 P；fork：部分，停止会 kill 后台 job 且不再唤醒（`mms-stop`，gate L5 已验），队列/插话为上游原生、实测可用，未跑完整忙碌会话三态验收；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：真实忙碌会话分别接受/排队/停止，不混成普通消息。
 - [ ] **C13.04 队列提升/移除/重排及实际delivery状态**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：服务端实际顺序一致；已送达不能显示撤回成功。
 - [ ] **C13.05 中途引导或重启后的空白回合和重发**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：中断原因可见，作废消息可准备重发，不自动重放。
-- [ ] **C13.06 BTW独立上下文与主transcript/queue隔离**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：旁问不打断主任务；有界脱敏上下文，取消互不影响；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。
-- [ ] **C13.07 BTW实际回答模型/来源/用量与错误可见**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：状态回答与模型回答分开，未发请求不能显示模型已答；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。
+- [ ] **C13.06 BTW独立上下文与主transcript/queue隔离**（原版 P；fork：部分，2026-09-19 `mms/adapter/plugin-btw.mjs`：`/btw` 是一次辅助模型调用，命令结果只写日志、不进入模型输入；上下文来自 session projection（最近 12 条人和模型的文字，每条截断，打码常见密钥）。gate L7 实测：主任务前台 `sleep` 期间旁问能答出之前的暗号，主任务照常完成。**未验**：取消旁问与取消主任务互不影响；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：旁问不打断主任务；有界脱敏上下文，取消互不影响；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。
+- [x] **C13.07 BTW实际回答模型/来源/用量与错误可见**（原版 P；fork：已验，2026-09-19：卡片写明实际回答的模型、通道、输入/输出 token 和参考条数；失败写「旁问失败（模型）」并打码；会话还没发过请求时明确说「没有发出旁问请求」。O9 单测 6 项，gate L7 实测；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：状态回答与模型回答分开，未发请求不能显示模型已答；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。
 - [ ] **C13.08 BTW折叠/已处置状态跨刷新和切会话保留**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：多卡片状态独立，运行中/首次未读规则准确。
 - [ ] **C13.09 等待用户回复/批准/结束等待真实接线**（原版 R；fork：未验；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：按钮真正调用所需控制，不因UI存在就算功能通过。
 - [ ] **C13.10 普通会话自动压缩、立即压缩及失败重试**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：autoCompaction/autoRetry 进入普通 Pi 控制链；立即 compact 透传 customInstructions 保留要求（当前上限 4000 字符），实际成功才显示完成；与 Bot 执行前 retry 分开记录，失败可见；DSH 原生提供等价功能也必须回归。
@@ -311,7 +311,7 @@
 - [ ] **C13.12 对话大纲与提问刻度导航**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：hover 展开，键盘/触屏可达，点击定位真实消息锚点；回到最新与未读状态一致，不因消息增长跳到错误位置。
 - [ ] **C13.13 原生 confirm/select/input/editor 与等待状态**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：真实工具交互渲染相应输入控件，回复/取消送回对应请求；等待状态只来自明确的工具请求，idle不是错误；错误与最终回复保持可见。
 - [ ] **C13.14 运行详情的实际协议、context、Token/cache 与脱敏进程**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：显示实际提供的 Thinking、选中通道/模型/协议、上下文占比及原生用量和cache；未提供的数据不编造，费用不冒充供应商账单，进程详情不泄露凭据。
-- [ ] **C13.15 普通会话执行/只读规划的工具边界**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：普通 /plan 默认关闭；开启后 runtime tool_call 只放行 read/grep/find/ls，拒绝写入、shell及其他工具；关闭恢复原权限；UI标明这不是 OS sandbox，并与 Fleet worker 永久只读边界分开。
+- [ ] **C13.15 普通会话执行/只读规划的工具边界**（原版 T；fork：部分，2026-09-19 `mms/adapter/plugin-plan.mjs`：用上游 `ctx.tools.guard`，计划模式下只放行 read / read_image / grep / glob / ask_user_question / exit_plan_mode（dsh 没有 find/ls，glob 覆盖二者），其他全部拒绝，包括 bash、run_code、子 agent、MCP、web；`/plan off` 恢复。gate L6 实测：计划模式里 bash `ls` 被 MMS 规则拒绝，关闭后同一调用成功；插件未生效时 L6 变红。**未做**：UI 上常驻「这不是 OS sandbox」标识（目前只在拒绝原因里写明）；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：普通 /plan 默认关闭；开启后 runtime tool_call 只放行 read/grep/find/ls，拒绝写入、shell及其他工具；关闭恢复原权限；UI标明这不是 OS sandbox，并与 Fleet worker 永久只读边界分开。
 
 <a id="c14"></a>
 ## C14 · pwd、项目定位与文件引用

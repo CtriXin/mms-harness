@@ -24,10 +24,10 @@
 | C13.03 停止 / C08.07 不重放副作用 | B | `jobs/tool-jobs`（`completionDelivery=wakeup`，`maxConsecutiveWakes=3`） | 点停止只中止当前回合，不 kill 后台 job；job 完成后会自动开新回合（实测第 5 轮） | 做自有包：点停止时 kill 本会话的后台 job，并且这次停止后不再唤醒 | 实测 + 源码 | **同意做自有包**。验收：起后台 job → 点停止 → 断言 job 被 kill，且不会自动开新回合；列入「同步上游必跑」。**已完成**：`mms/adapter/plugin-stop.mjs`，gate O7 + L5 PASS，端到端 mutation 红→绿 |
 | C13.02 过程折叠 | A | `client/ui-chat` | 缺「全部折叠」按钮 | 标「由上游满足」 | 实测 | 按建议 |
 | C13.03/.04 排队与插话 | A/B | `ui-conversation` QueueDock，`QueueAction`=edit/remove/steer | 不能重排 | 标「由上游满足」，重排不迁 | 实测 + 源码 | 按建议 |
-| C13.06–.08 BTW 旁问 | 缺失 | 无 | — | 进桶 B，做独立包 | 源码 | 按建议 |
+| C13.06–.08 BTW 旁问 | 缺失 | 无 | — | 进桶 B，做独立包 | 源码 | 按建议 · **已做** `/btw`（`plugin-btw.mjs`，C13.06 部分、C13.07 已验；C13.08 折叠状态未做） |
 | C13.10 压缩带保留要求 | B | `compaction/command-compact`（不接受参数） | 不能透传保留要求 | 自有命令 `/mms-compact <保留要求>` | 源码 | 按建议 |
 | C13.11 斜线命令 | B | `client/ui-commands` | 缺 `/btw` `/thinking` `/name` `/clear-queue` `/help` | 只迁 `/btw` 和 `/help` | 实测 | 按建议 |
-| C13.15 规划只读 | B | `plan/plan-mode`（"every tool remains available"） | 计划模式不限制工具 | 做自有包：plan 状态下在工具层只放行 read/grep/find/ls | 源码 | **做自有包**（机主：沙箱+审批是降级，不选） |
+| C13.15 规划只读 | B | `plan/plan-mode`（"every tool remains available"） | 计划模式不限制工具 | 做自有包：plan 状态下在工具层只放行 read/grep/find/ls | 源码 | **做自有包**（机主：沙箱+审批是降级，不选）· **已做** `plugin-plan.mjs`，gate L6 实测 |
 | C05.01 预览 | B | `ui-sidebar-documentpreview` | 比 MMS 多 PDF/Office，但没有下载按钮 | 标「由上游满足」，下载按需补 | 实测 + 源码 | 按建议 |
 | C05.02–.04 版本快照 | B | `deliverables/workspace-changes` | 只有本轮 diff，Host 重启后丢失，没有跨版本比较 | 先不迁 | 源码 | 按建议 |
 | C06.03 本机 Skills 合并 | B | `skill-filesystem`（`agentsHome` 默认扫描 `~/.agents`） | 上游默认开启，MMS 默认关闭 | 需要机主定 | 源码 | **保持 MMS 默认关闭**：配置 `includeDefaultRoots`/`agentsHome`，不改上游包 |

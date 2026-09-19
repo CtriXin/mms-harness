@@ -91,6 +91,12 @@ def offline(node: Path, build: bool, runtime_from: Path):
     out = run([str(node), '--test', 'test_stop.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
     record('O7 stop kills owned jobs (C13.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
+    out = run([str(node), '--test', 'test_plan.mjs'], cwd=ADAPTER, env=env)
+    tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
+    record('O8 plan mode is read-only (C13.15)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
+    out = run([str(node), '--test', 'test_btw.mjs'], cwd=ADAPTER, env=env)
+    tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
+    record('O9 /btw side question (C13.06/.07)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
     out = run(['npx', '--no-install', 'vitest', 'run', *FORK_TESTS], env=env)
     tail = [l.strip() for l in (out.stdout + out.stderr).splitlines() if l.strip().startswith(('Test Files', 'Tests'))]
     record('O3 fork UI overlay ui-mms + overlaid upstream (C14.01/.02, C12, C15)', 'PASS' if out.returncode == 0 else 'FAIL', ' · '.join(tail))
@@ -234,8 +240,15 @@ def web_smoke(inst: Instance):
         passed = bool(installed['client_artifacts']) and title is not None and 'MMS Harness' in title.group(1)
         record('W1 Web boots with fork client', 'PASS' if passed else 'FAIL',
                f'port={port} title={title.group(1) if title else None!r} artifacts={len(installed["client_artifacts"])}; UI 行为见 SYNC-GATE.md 手工项')
+        # A plugin whose injected service never appears stays pending silently
+        # (mms-plan-readonly on `planMode`, 2026-09-19); the host prints it once at boot.
+        pending = [l for l in (inst.dest / 'web.log').read_text().splitlines() if l.startswith('mms-') and 'pending' in l]
+        record('W3 every MMS plugin activated', 'FAIL' if pending else 'PASS',
+               '; '.join(l.split(' (')[0] + ': ' + l.rsplit(': ', 1)[-1] for l in pending) or 'no pending mms-* entry')
         if passed:
             overlay_check(opener, f'http://127.0.0.1:{port}', html)
+            plan_check(inst, opener, f'http://127.0.0.1:{port}')
+            btw_check(inst, opener, f'http://127.0.0.1:{port}')
             stop_check(inst, opener, f'http://127.0.0.1:{port}')
     finally:
         proc.terminate()  # only the PID this gate started
@@ -255,6 +268,124 @@ def rpc(opener, base, method, request):
     if not result.get('ok'):
         raise RuntimeError(f'{method}: {result.get("error")}')
     return result['value']
+
+
+def command(opener, base, session, line):
+    """Run one slash command the way the Web client does (commands/execute)."""
+    body = json.dumps({'type': 'client-request', 'rpcId': str(uuid.uuid4()), 'method': 'commands/execute',
+                       'payload': {'args': {'agentId': session, 'line': line, 'submittedAttachments': []}}}).encode()
+    req = urllib.request.Request(f'{base}/api/commands/execute', data=body, headers={'content-type': 'application/json', 'origin': base})
+    result = json.loads(opener.open(req, timeout=30).read())['result']
+    if not result.get('ok'):
+        raise RuntimeError(f'{line}: {result.get("error")}')
+    return result['value']['result']
+
+
+def settle(inst: Instance, since: float, quiet=10, limit=150):
+    """Wait until the turn started after `since` made a request and then went quiet."""
+    path = inst.instance / 'transport.jsonl'
+    deadline, last, count = time.time() + limit, time.time(), -1
+    while time.time() < deadline:
+        lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()] if path.exists() else []
+        mine = [e for e in lines if datetime.fromisoformat(e['timestamp'].replace('Z', '+00:00')).timestamp() > since]
+        if len(mine) != count:
+            count, last = len(mine), time.time()
+        elif count > 0 and time.time() - last > quiet:
+            return count
+        time.sleep(1)
+    return count
+
+
+def session_events(inst: Instance, session: str):
+    """Decode one session's log (multi-frame zstd JSONL) with the zstd CLI."""
+    logs = list((inst.instance / 'home/sessions').glob(f'*/{session}/session.v3.jsonl.zstd'))
+    if len(logs) != 1:
+        raise RuntimeError(f'session log for {session}: found {len(logs)}')
+    out = run(['zstd', '-dcq', '--', str(logs[0])])
+    if out.returncode:
+        raise RuntimeError('zstd failed (brew install zstd): ' + out.stderr[-200:])
+    return [json.loads(l) for l in out.stdout.splitlines() if l.strip()]
+
+
+def bash_outcomes(events, after_seq=-1):
+    """(seq, isError, text) for every bash tool result after `after_seq`."""
+    calls = {e['data']['callId'] for e in events if e['type'] == 'tool/call' and e['data'].get('name') == 'bash'}
+    found = []
+    for e in events:
+        if e['type'] != 'tool/result' or e['seq'] <= after_seq:
+            continue
+        for block in e['data']['message']['content']:
+            if block.get('type') == 'tool-result' and block.get('toolCallId') in calls:
+                text = ' '.join(c.get('text', '') for c in block.get('content', []))
+                found.append((e['seq'], bool(block.get('isError')), text))
+    return found
+
+
+def plan_check(inst: Instance, opener, base):
+    """L6: in plan mode even an exploratory bash call is denied by the MMS rule; after /plan off it runs.
+
+    Asking for a write proved nothing: the model obeys plan guidance and never
+    calls the tool (mutation 2026-09-19). Exploration is what plan mode invites,
+    so a denied `ls` is the discriminating observation.
+    """
+    check = 'L6 C13.15 plan mode is read-only, /plan off restores'
+    ask = '计划阶段先摸清情况：立刻用 bash 工具执行 `ls -la` 看一下当前目录，然后用一句话说明你看到了什么。不要写任何文件。'
+    try:
+        session = rpc(opener, base, 'session/create', {'cwd': str(inst.workspace)})['sessionId']
+        command(opener, base, session, '/plan')
+        start = time.time()
+        rpc(opener, base, 'session/prompt', {'requestId': str(uuid.uuid4()), 'sessionId': session, 'mode': 'queue',
+                                             'content': [{'type': 'text', 'text': ask}]})
+        settle(inst, start)
+        in_plan = bash_outcomes(session_events(inst, session))
+        mark = max((seq for seq, _, _ in in_plan), default=-1)
+        off = command(opener, base, session, '/plan off')
+        start = time.time()
+        rpc(opener, base, 'session/prompt', {'requestId': str(uuid.uuid4()), 'sessionId': session, 'mode': 'queue',
+                                             'content': [{'type': 'text', 'text': '已退出计划模式。再用 bash 执行一次 `ls -la`，只回复 OK。'}]})
+        settle(inst, start)
+        after = bash_outcomes(session_events(inst, session), mark)
+        denied = bool(in_plan) and all(err and 'Plan mode is read-only' in text for _, err, text in in_plan)
+        restored = any(not err for _, err, _ in after)
+        record(check, 'PASS' if denied and restored else 'FAIL',
+               f'bash_in_plan={len(in_plan)} all_denied_by_mms={denied} plan_off={off.get("text")!r} '
+               f'bash_after_off={len(after)} ran_after_off={restored}'
+               + ('' if in_plan else ' (model made no bash call in plan mode: inconclusive)'))
+    except (OSError, RuntimeError, KeyError) as e:
+        record(check, 'FAIL', str(e)[:300])
+
+
+def btw_check(inst: Instance, opener, base):
+    """L7: /btw answers from this session's context while the main task keeps running, and does not stop it."""
+    check = 'L7 C13.06/.07 /btw answers mid-task, main task unaffected'
+    secret = f'BTW_{uuid.uuid4().hex[:6].upper()}'
+    marker = f'gate_btw_{uuid.uuid4().hex[:8]}'
+    running = lambda: run(['pgrep', '-f', marker]).returncode == 0
+    try:
+        session = rpc(opener, base, 'session/create', {'cwd': str(inst.workspace)})['sessionId']
+        start = time.time()
+        rpc(opener, base, 'session/prompt', {'requestId': str(uuid.uuid4()), 'sessionId': session, 'mode': 'queue', 'content': [
+            {'type': 'text', 'text': f'请记住暗号 {secret}。然后用 bash 在前台执行 `sleep 20 && touch {marker}.txt`，等它完成后只回复 OK。'}]})
+        for _ in range(90):
+            if running(): break
+            time.sleep(1)
+        else:
+            record(check, 'FAIL', 'main task never started its command (no marker process in 90s)')
+            return
+        answer = command(opener, base, session, '/btw 我刚才让你记住的暗号是什么？只回答暗号。')
+        busy_during_btw = running()
+        # settle() would read the silent `sleep` as a finished turn; wait for the file itself.
+        for _ in range(120):
+            if (inst.workspace / f'{marker}.txt').exists(): break
+            time.sleep(1)
+        written = (inst.workspace / f'{marker}.txt').exists()
+        text = answer.get('text', '')
+        passed = answer.get('kind') == 'success' and secret in text and '回答模型' in text and busy_during_btw and written
+        record(check, 'PASS' if passed else 'FAIL',
+               f'kind={answer.get("kind")} knows_secret={secret in text} attributed={"回答模型" in text} '
+               f'main_busy_during_btw={busy_during_btw} main_finished={written}')
+    except (OSError, RuntimeError, KeyError) as e:
+        record(check, 'FAIL', str(e)[:300])
 
 
 def stop_check(inst: Instance, opener, base):
