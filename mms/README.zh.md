@@ -12,4 +12,4 @@
 
 在仓库运行 `pnpm install --frozen-lockfile`，然后用 `DSH_CLIENT_TITLE="MMS Harness" pnpm run build` 构建。`python3 mms/install.py` 接受 `--destination`、`--mms-root`、`--node` 和可选 `--runtime-from`，安装到全新目录，生成 `MMS Harness.command`。安装器采用锁定的 upstream 依赖，将本 fork 同一次构建的全部 client package 和 Web assets 放入独立 runtime；不改其他现有安装。安装元数据记录 fork commit 和 client artifact SHA-256。
 
-双击入口会启动或复用独立服务并打开浏览器。`start/stop/status/open` 只管理该实例；停止保留会话。当前默认仅本机 `127.0.0.1:3092`，手机远程仍在迁移清单中。
+双击入口会启动或复用独立服务并打开浏览器。`start/stop/status/open` 只管理该实例；停止保留会话；`upgrade` / `rollback` 负责升级和换回。默认仅本机 `127.0.0.1:3092`，手机远程默认关闭，用 `/remote on` 开启。能力现状见 [STATUS](STATUS.md)。
