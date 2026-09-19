@@ -124,7 +124,7 @@
 
 | 项 | 判定 | 上游依据 | 缺口 / 做法 |
 |---|---|---|---|
-| C01.06 | B | `core/agent-default-model/src/index.ts:90,100`；`api/session-controller/src/commands.ts:153` | 会话里换模型会同时改全局默认。要拆开得替换 `agentDefaultModel` 服务。**待机主决定**：会话里换模型要不要改全局默认 |
+| C01.06 | B | `core/agent-default-model/src/index.ts:90,100`；`api/session-controller/src/commands.ts:153` | 会话里换模型会同时改全局默认。**机主 2026-09-19 选 A**：会话里切模型只影响本会话，模型菜单加「设为新会话默认」。已做：`plugin-default-model.mjs` + ui-mms 菜单项，gate O11/L9 |
 | C01.07 | B | `session-controller/src/catalog.ts:47-56`；`commands.ts:161-165` | provider 级失败可见；缺 model 级可用性和拒绝原因逐条展示 |
 | C02.04 / C02.06 / C08.04 / C08.07 / C09.05 / C12.06 / C21.02 | A | 见 MIGRATION 条目 | 已实测通过 |
 | C13.09 | A | `client/ui-approval/README.md:11` | ask-user 已实测；审批待测 |

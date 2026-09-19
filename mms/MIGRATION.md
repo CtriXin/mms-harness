@@ -15,7 +15,7 @@
 - 原版 **T**：存在 source/test，尚缺对应执行证据。**缺口**：已有记录明确保留验收缺口，待当前源码重核。**候选**：未合并或未采用，不能冒充已交付。
 - 每项引用 E 编号；精确证据与限制见 [证据索引](MIGRATION-EVIDENCE.md)。R 中仅引用 E17 的项要特别区分“当前 fork 已验”和“旧 MMS 独立验收”。
 
-当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 32、部分 31、未迁 122、未验 5、待核对 3。不能把这些项简单相加成产品完成百分比。
+当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 33、部分 30、未迁 122、未验 5、待核对 3。不能把这些项简单相加成产品完成百分比。
 
 ## 能力总览
 
@@ -74,7 +74,7 @@
 - [ ] **C01.03 模型服务首次连接、保存、校验与失败原因**（原版 P；fork：未迁；[E03](MIGRATION-EVIDENCE.md#e03)、[E04](MIGRATION-EVIDENCE.md#e04)）。验收：从真实表单连接自己的服务；失败保留输入且指出缺项。
 - [ ] **C01.04 通道新增、编辑、删除确认与最后一个通道保护**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：读写权限与配置审计生效；取消删除不改变配置。
 - [ ] **C01.05 模型发现 replace、manual 边界与空结果保护**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：远端删模型后本地不残留；失败/空发现不清空人工配置。
-- [ ] **C01.06 模型/通道/effort 默认值持久化与会话覆盖分离**（原版 R；fork：部分；[E01](MIGRATION-EVIDENCE.md#e01)、[E12](MIGRATION-EVIDENCE.md#e12)）。验收：重启默认值保留；当前会话和显式任务选择不被改写。
+- [x] **C01.06 模型/通道/effort 默认值持久化与会话覆盖分离**（原版 R；fork：已验，2026-09-19 机主选方案 A：`plugin-default-model.mjs` 让会话里切模型只影响本会话，模型菜单「设为新会话默认」是唯一改默认的入口。gate O11 单测、L9 实测（RPC 切模型后 settings 不变，显式设置后改变）；去掉插件后 L9 变红（切模型改掉了默认）；[E01](MIGRATION-EVIDENCE.md#e01)、[E12](MIGRATION-EVIDENCE.md#e12)）。验收：重启默认值保留；当前会话和显式任务选择不被改写。
 - [ ] **C01.07 模型列表友好通道名、实际可用性与真实阻塞原因**（原版 R；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：不可用模型不伪装可选，展示实际 launcher/provider 拒绝原因。
 - [ ] **C01.08 慢只读发现/检查不阻塞其他操作，写入仍串行**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：慢发现期间其他操作响应；保存仍校验配置 revision 并拒绝过期写。
 - [ ] **C01.09 provider/account 路由排序与本地使用统计分工**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：role primary > auto > fallback；同 role 使用较大 effective priority，family_priority_overrides 仅覆盖命中 family；model use_count/最近使用用于展示排序而非路由主键。保持 config/provider/account/source/auth_mode 的原意，显式选择不得被 UI 默认或 bridge 改写。

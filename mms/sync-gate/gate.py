@@ -437,7 +437,10 @@ def default_model_check(inst: Instance, opener, base):
         time.sleep(1)
         kept = settings.read_text() == before and other['provider'] not in settings.read_text()
         wanted = {'provider': other['provider'], 'model': other['model'], 'reasoningEffort': other['reasoning_efforts'][-1]}
-        result = command(opener, base, session, '/default-model ' + json.dumps(wanted))
+        try:
+            result = command(opener, base, session, '/default-model ' + json.dumps(wanted))
+        except (RuntimeError, KeyError) as e:  # an unknown command has no result value
+            result = {'kind': 'error', 'text': f'command failed: {e}'}
         time.sleep(1)
         after = settings.read_text()
         changed = result.get('kind') == 'success' and other['provider'] in after and wanted['reasoningEffort'] in after
