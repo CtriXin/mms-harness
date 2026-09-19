@@ -117,3 +117,24 @@
 | 决定 |
 |---|
 | **B**（机主 2026-09-18）：自有 LAN 网关，dsh 保持 loopback；C 方案写进 C07.05 外网引导 |
+
+## 第 4 批：剩余 Pilot 主要能力的上游核对（2026-09-19）
+
+范围：MIGRATION 里 Pilot 实测过（R 级）、fork 还没完成的产品能力，不含 C11（升级，已做）、C22（Windows）、C23/C24（工程）。核对是只读的源码对照，A 类要实测后才能勾选；本批 8 项 A 类已实测，结果写在 MIGRATION 各条目里。
+
+| 项 | 判定 | 上游依据 | 缺口 / 做法 |
+|---|---|---|---|
+| C01.06 | B | `core/agent-default-model/src/index.ts:90,100`；`api/session-controller/src/commands.ts:153` | 会话里换模型会同时改全局默认。要拆开得替换 `agentDefaultModel` 服务。**待机主决定**：会话里换模型要不要改全局默认 |
+| C01.07 | B | `session-controller/src/catalog.ts:47-56`；`commands.ts:161-165` | provider 级失败可见；缺 model 级可用性和拒绝原因逐条展示 |
+| C02.04 / C02.06 / C08.04 / C08.07 / C09.05 / C12.06 / C21.02 | A | 见 MIGRATION 条目 | 已实测通过 |
+| C13.09 | A | `client/ui-approval/README.md:11` | ask-user 已实测；审批待测 |
+| C07.04 | C（fork 自有） | 网关在 `mms/adapter/remote.mjs` | 应用内 `/remote rotate` 后当前窗口要拿到新 cookie |
+| C08.05 / C08.06 | C / B | 上游无接续资料 | 自有包：从会话日志生成有界、脱敏的接续资料 |
+| C09.02 | B | `subagent-codex/README.md:58,101`；`subagent-claude-code/README.md:60,176` | 其他 CLI 使用真实 HOME；用 provider 实例的 `env` 注入私有 HOME |
+| C12.04 / C12.11 / C14.06 | B | `ui-primitives/src/Modal.tsx:45`；`ui-layout/README.md:84`；`DirectoryBrowser.tsx:783-790` | 在 ui-mms 里补焦点返回、390px 适配、目录键盘左右切层 |
+| C16.* 持久 Bot | C | 上游无 Bot 实体、无长期记忆（可借 `preset`、`goal`、`experimental/agent-team`） | 最大一块，放最后 |
+| C17.04 / C17.05 | B | `tool-subagent/README.md:69`；`docs/subsystems/subagent.md:263,350` | 缺「计划步骤 → 指定模型的子 agent」映射 |
+| C18.* 日程 | C | `docs/subsystems/schedule.md:5,9` 只有会话内提醒 | 自有日程包；执行端可借 `packages/webhook` |
+| C19.* Fleet | B | `tool-subagent`（显式 provider+model、one-shot）、`workflow` 并行 | 缺用户入口、worker 只读 guard（可复用 plugin-plan）、指定模型失效即停 |
+
+建议顺序：C07.04 → ui-mms 交互补齐（C12.04/C12.11/C14.06）→ C01.07 → C19 Fleet → C09.02 → C18 → C16/C17。

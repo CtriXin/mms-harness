@@ -15,7 +15,7 @@
 - 原版 **T**：存在 source/test，尚缺对应执行证据。**缺口**：已有记录明确保留验收缺口，待当前源码重核。**候选**：未合并或未采用，不能冒充已交付。
 - 每项引用 E 编号；精确证据与限制见 [证据索引](MIGRATION-EVIDENCE.md)。R 中仅引用 E17 的项要特别区分“当前 fork 已验”和“旧 MMS 独立验收”。
 
-当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 24、部分 33、未迁 126、未验 7、待核对 3。不能把这些项简单相加成产品完成百分比。
+当前共 **25 组 / 193 项**（含工程/验收项和 3 个候选检查项，并非 193 个独立产品功能）。原版证据：R 74、P 87、T 27、缺口 2、候选 3。fork（2026-09-19 按条目重数）：已验 31、部分 32、未迁 122、未验 5、待核对 3。不能把这些项简单相加成产品完成百分比。
 
 ## 能力总览
 
@@ -91,9 +91,9 @@
 - [x] **C02.01 解析后的 context/input/output/reasoning 元数据导入 fork**（原版 R；fork：已验；[E05](MIGRATION-EVIDENCE.md#e05)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：有来源/hash；缺字段使用版本化 catalog，不凭模型名猜窗口。
 - [ ] **C02.02 人工 capability 覆盖、批量逐行复核、未保存项保护**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：人工值优先；新增发现不重置已选项，待确认项不默认写入。
 - [ ] **C02.03 统一 context resolver 与各 harness 消费一致性**（原版 R；fork：部分；[E05](MIGRATION-EVIDENCE.md#e05)、[E21](MIGRATION-EVIDENCE.md#e21)）。验收：UI、请求预算、各消费者一致；[1m] 仅作为规范化输入；resolver顺序为显式context-overrides→人工policy→approved→profile→provider缓存→有来源catalog→Claude家族规则；userSet不自动刷新、不校准封顶、不随意补[1m]，未知值由caller明确处理。
-- [ ] **C02.04 按实际模型暴露 effort，默认/关闭/不支持值可解释**（原版 R；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：无硬编码假档位；清除覆盖及不支持值处理与 MMS 对齐。
+- [x] **C02.04 按实际模型暴露 effort，默认/关闭/不支持值可解释**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：选 MiniMax-M3（无推理档位）后 effort 按钮消失，切回 gpt-5.6-sol 恢复；RPC 发不支持的 effort 未测；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：无硬编码假档位；清除覆盖及不支持值处理与 MMS 对齐。
 - [x] **C02.05 真实请求中的 DeepSeek Low 与 GPT High**（原版 R；fork：已验；[E17](MIGRATION-EVIDENCE.md#e17)）。验收：Anthropic budget=2048 与 Responses reasoning=high，实际响应成功。
-- [ ] **C02.06 保存共享默认 effort 后新任务即时刷新**（原版 R；fork：未迁；[E12](MIGRATION-EVIDENCE.md#e12)）。验收：不 reload；真实保存调用链驱动新任务刷新，显式选择不变。
+- [x] **C02.06 保存共享默认 effort 后新任务即时刷新**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：dsh 没有单独的「默认 effort」设置项，在会话里选的即为共享默认；把 effort 从 Medium 改成 High 后不刷新，新会话显示 High；[E12](MIGRATION-EVIDENCE.md#e12)）。验收：不 reload；真实保存调用链驱动新任务刷新，显式选择不变。
 - [ ] **C02.07 Anthropic-first、Responses、URL 规范化与 cache transport 证据**（原版 R；fork：部分；[E17](MIGRATION-EVIDENCE.md#e17)）。验收：协议/实际 request_path 可核对；自定义头/敏感 relay 另验，不能默默降级。
 - [ ] **C02.08 识图借用与同通道 vision relay**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)、[E21](MIGRATION-EVIDENCE.md#e21)）。验收：不识图模型可经明确 relay 使用图片；凭据不进入工具结果，各 CLI 分别验证；Claude Code/OpenCode 的 MCP 共用同一个 relay_plan；session catalog 0600、MMS_VISION_RELAY_CONFIG，凭据仅进请求头；模型已识图/空池/禁用时不注册或删除旧server；Codex明确不接特殊 relay，见 C02.09/.10。
 - [ ] **C02.09 Pi vision relay 注入、池隔离与空池可见**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：注入 MMS_PI_MAIN_MODEL_VISION 和 MMS_PI_VISION_POOL；池只取当前通道暴露且能力允许的 wire ID；主模型会识图则不注册工具；唯一开关 [vision_sidecar] enabled；每次随机排序并有界尝试其他候选，禁止内置模型名单/优先级；空数组表示已计算且无候选，必须提示；原生 Pi 无注入时扫描 models.json，不能借另一个账号。
@@ -198,10 +198,10 @@
 - [x] **C08.01 新会话持久化、关浏览器/重启服务后续聊**（原版 R；fork：已验；[E01](MIGRATION-EVIDENCE.md#e01)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：fork自己的会话、模型、Recipe状态保留且真实请求继续成功。
 - [ ] **C08.02 Pi CLI 历史只读发现、导入及去重**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：不修改原 CLI 日志，不把只读查看冒充接管原进程。
 - [ ] **C08.03 从 CLI 历史复制采用并继续原上下文**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：显式采用；原进程/原日志保持，导入丢失项明确说明。
-- [ ] **C08.04 失败/重试耗尽提示及 error-only 终端消息可见**（原版 R；fork：未迁；[E11](MIGRATION-EVIDENCE.md#e11)）。验收：失败不能显示空白或成功，成功后清除旧失败提示。
+- [x] **C08.04 失败/重试耗尽提示及 error-only 终端消息可见**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：删掉临时实例里一个通道的凭据后发消息，界面显示「本轮运行失败」、具体原因和 MISSING_CREDENTIAL；提示文字偏技术；[E11](MIGRATION-EVIDENCE.md#e11)）。验收：失败不能显示空白或成功，成功后清除旧失败提示。
 - [ ] **C08.05 不用旧模型生成接续资料，支持编辑/复制**（原版 R；fork：未迁；[E11](MIGRATION-EVIDENCE.md#e11)）。验收：本地有界历史、脱敏、保留未执行/取消/未知结果。
 - [ ] **C08.06 换模型续原会话或创建干净新草稿**（原版 R；fork：未迁；[E11](MIGRATION-EVIDENCE.md#e11)）。验收：显式发送才创建/执行；普通草稿和原会话保留。
-- [ ] **C08.07 重启后进行中任务显示 interrupted，不重放副作用**（原版 R；fork：未验；[E07](MIGRATION-EVIDENCE.md#e07)、[E11](MIGRATION-EVIDENCE.md#e11)）。验收：逐场景区分记录保留、可续接和仍在运行；DSH需等价测试。
+- [x] **C08.07 重启后进行中任务显示 interrupted，不重放副作用**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：前台 bash 运行中 SIGKILL host，重启后对原会话发消息，日志补上 `turn/end interrupted` 和 bash 的中断错误结果，bash 调用只有 1 次，标记文件未写出（没有重放）；[E07](MIGRATION-EVIDENCE.md#e07)、[E11](MIGRATION-EVIDENCE.md#e11)）。验收：逐场景区分记录保留、可续接和仍在运行；DSH需等价测试。
 - [ ] **C08.08 原 Pilot/旧 Pi 历史可读与迁移回滚**（原版 T；fork：未迁；[E18](MIGRATION-EVIDENCE.md#e18)）。验收：迁移前后日志 hash不变；不宣称跨格式无损 native resume。
 - [ ] **C08.09 会话归档与恢复**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：归档从活跃列表隐藏，可检索恢复；原 native history/工作目录/附件保留，刷新和服务重启后保持；与删除及 worker 内部归档区分。
 - [ ] **C08.10 整段或指定回复处分叉**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：可从指定 event/reply 创建独立 native 对话历史，原历史不修改；默认仍共用 workspace，不承诺 Git worktree 或文件隔离；边界非法/运行中不可操作时明确拒绝。
@@ -220,7 +220,7 @@
 - [ ] **C09.02 每会话 private HOME/config/env 与凭据注入**（原版 R；fork：部分；[E01](MIGRATION-EVIDENCE.md#e01)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：DSH已独立隔离；其他CLI继承相同fail-closed边界后才通过。
 - [ ] **C09.03 启动错误、可用性、程序位置与私有运行时诊断**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：PATH缺项/npm缓存/global安装位置分别识别，不能静默换账号。
 - [ ] **C09.04 协议/bridge/header/cache 敏感通道合同**（原版 P；fork：部分；[E04](MIGRATION-EVIDENCE.md#e04)、[E21](MIGRATION-EVIDENCE.md#e21)）。验收：保留实际协议和有效header，cache path可核对；DSH非全部relay已验；MMS→敏感relay的header、sticky/cache边界见C09.12；真实 request_path 缺失不得算路由验收通过。
-- [ ] **C09.05 session resume/最后使用模型与通道状态**（原版 R；fork：部分；[E01](MIGRATION-EVIDENCE.md#e01)）。验收：明确resume目标，不回落其他会话或全局默认。
+- [x] **C09.05 session resume/最后使用模型与通道状态**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：会话用 deepseek-v4-flash 发过请求，关着时把全局默认改成 gpt-5.6-sol 并重启，原会话下一次请求仍是 deepseek-v4-flash，新会话用 gpt-5.6-sol；[E01](MIGRATION-EVIDENCE.md#e01)）。验收：明确resume目标，不回落其他会话或全局默认。
 - [ ] **C09.06 本机配置根和公开/开发命令边界**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：命令指向明确安装；旧说明不覆盖当前实际产品契约。
 - [ ] **C09.07 进程 shutdown/双 Ctrl-C/子进程 pipes 可靠性**（原版 P；fork：未验；[E04](MIGRATION-EVIDENCE.md#e04)、[E15](MIGRATION-EVIDENCE.md#e15)）。验收：退出回收本实例，不杀其他服务；Windows单独测。
 - [ ] **C09.08 Codex hook trust 稳定复用，不重复 Hooks need review**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：gateway CODEX_HOME 固定 <selected config root>/codex-gateway/.codex（当前默认 ~/.config/mms-next）；每 PID 会话只做 wrapper/tmp，.codex 链接稳定目录。bypass 同时传 approvals/sandbox 与 hook-trust 两个 flag；真实 hooks.json trust 优先于 stale sibling；hash drift 用 app-server hooks/list currentHash 校正，仅允许 MMS-managed hook hash；批准一次只回写稳定 gateway，后续不重复弹窗；不扩大为自动信任任意用户 hook。
@@ -279,7 +279,7 @@
 - [ ] **C12.03 模型去重/收藏优先/友好通道名与高级选项**（原版 P；fork：部分；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：同模型多路由可区分但不淹没常用选择；收藏排序保留。
 - [ ] **C12.04 各输入弹窗focus、Esc层级、关闭回入口**（原版 R；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：模型/pwd已做；改名、资料、帮助、Bot设定等逐入口验收。
 - [ ] **C12.05 异步保存等待、失败保留输入、旧响应不覆盖新选择**（原版 R；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：按完整保存调用链断言，不能只验证helper。
-- [ ] **C12.06 侧栏双击改名与首字符不被延迟select覆盖**（原版 R；fork：未迁；[E07](MIGRATION-EVIDENCE.md#e07)、[E09](MIGRATION-EVIDENCE.md#e09)）。验收：打开即focus；持续输入不丢首字符，保存真实生效。
+- [x] **C12.06 侧栏双击改名与首字符不被延迟select覆盖**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：dsh 是改名弹窗而不是双击行内改名；打开后立即连续输入「颜色测试X」，保存后侧栏标题完整；[E07](MIGRATION-EVIDENCE.md#e07)、[E09](MIGRATION-EVIDENCE.md#e09)）。验收：打开即focus；持续输入不丢首字符，保存真实生效。
 - [ ] **C12.07 未读完成/已读待命及真实滚动已读语义**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)、[E21](MIGRATION-EVIDENCE.md#e21)）。验收：准确记录打开即滚到底/停在中途的差异，不按旧宣传推断；FEATURES在main/dev对此描述不同，按各自真实state/UI检查；保留dev打开后到底转已读、中途停留保持未读的具体语义。
 - [ ] **C12.08 可拖高/自增高composer、滚动折叠和专注阅读**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：输入不遮挡，最终答案/错误/批准保持可见，关闭恢复阅读位置。
 - [ ] **C12.09 Enter发送开关、主题/字号/强调色与设置布局**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：偏好持久化，大字窄屏仍可操作。
@@ -305,7 +305,7 @@
 - [ ] **C13.06 BTW独立上下文与主transcript/queue隔离**（原版 P；fork：部分，2026-09-19 `mms/adapter/plugin-btw.mjs`：`/btw` 是一次辅助模型调用，命令结果只写日志、不进入模型输入；上下文来自 session projection（最近 12 条人和模型的文字，每条截断，打码常见密钥）。gate L7 实测：主任务前台 `sleep` 期间旁问能答出之前的暗号，主任务照常完成。**未验**：取消旁问与取消主任务互不影响；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：旁问不打断主任务；有界脱敏上下文，取消互不影响；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。
 - [x] **C13.07 BTW实际回答模型/来源/用量与错误可见**（原版 P；fork：已验，2026-09-19：卡片写明实际回答的模型、通道、输入/输出 token 和参考条数；失败写「旁问失败（模型）」并打码；会话还没发过请求时明确说「没有发出旁问请求」。O9 单测 6 项，gate L7 实测；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：状态回答与模型回答分开，未发请求不能显示模型已答；E06 仅验证旧实现的限定场景，当前 native BTW 与忙碌主任务并发仍须重核。
 - [ ] **C13.08 BTW折叠/已处置状态跨刷新和切会话保留**（原版 P；fork：未迁；[E06](MIGRATION-EVIDENCE.md#e06)）。验收：多卡片状态独立，运行中/首次未读规则准确。
-- [ ] **C13.09 等待用户回复/批准/结束等待真实接线**（原版 R；fork：未验；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：按钮真正调用所需控制，不因UI存在就算功能通过。
+- [ ] **C13.09 等待用户回复/批准/结束等待真实接线**（原版 R；fork：部分，2026-09-19 实测（临时实例，真实模型）：ask_user_question 端到端通过（界面出单选卡，点「蓝」提交，模型回复「蓝」）；审批流程未测；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：按钮真正调用所需控制，不因UI存在就算功能通过。
 - [ ] **C13.10 普通会话自动压缩、立即压缩及失败重试**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：autoCompaction/autoRetry 进入普通 Pi 控制链；立即 compact 透传 customInstructions 保留要求（当前上限 4000 字符），实际成功才显示完成；与 Bot 执行前 retry 分开记录，失败可见；DSH 原生提供等价功能也必须回归。
 - [ ] **C13.11 斜线命令与动态扩展补全**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：/help /files /plan on|off /thinking LEVEL /compact [保留要求] /clear-queue /name /fork /export，另有已有 BTW；输入 / 列出，方向键选择，Tab/Enter 补全，带参数 Enter 执行；当前 Pi 扩展命令动态列出，未知/不支持明确报错，不把补全直接当发送。
 - [ ] **C13.12 对话大纲与提问刻度导航**（原版 T；fork：未迁；[E21](MIGRATION-EVIDENCE.md#e21)）。验收：hover 展开，键盘/触屏可达，点击定位真实消息锚点；回到最新与未读状态一致，不因消息增长跳到错误位置。
@@ -442,7 +442,7 @@
 回归入口：[tests/test_mms_channel_switch_contract.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_channel_switch_contract.py)；[tests/test_mms_session_owner_forward_compat.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_session_owner_forward_compat.py)。路径按新布局核对；此处不等同本轮执行。
 
 - [ ] **C21.01 Stable/Preview明确选择与独立版本判断**（原版 R；fork：未迁；[E09](MIGRATION-EVIDENCE.md#e09)、[E18](MIGRATION-EVIDENCE.md#e18)）。验收：版本线清楚且可逆，不把5→4当普通自动升级。
-- [ ] **C21.02 未知owner会话不泄漏到列表/详情**（原版 R；fork：未迁；[E18](MIGRATION-EVIDENCE.md#e18)）。验收：旧版本看到不认识的owner时拒绝，不改写原文件。
+- [x] **C21.02 未知owner会话不泄漏到列表/详情**（原版 R；fork：已验，2026-09-19 实测（临时实例，真实模型）：Pilot 的 owner 在 dsh 对应会话格式版本。放一个格式 v99 的会话文件，列表跳过它不报错，对它发消息被拒（resume failed），文件字节不变。附带发现：一个损坏的会话文件会让整个会话搜索失败，这是上游行为；[E18](MIGRATION-EVIDENCE.md#e18)）。验收：旧版本看到不认识的owner时拒绝，不改写原文件。
 - [ ] **C21.03 未知owner的mutation端点完整fail-closed**（原版 缺口；fork：未迁；[E18](MIGRATION-EVIDENCE.md#e18)）。验收：历史报告承认残留；必须按当前源码重核，不得用列表测试盖章。
 - [ ] **C21.04 4→5→4往返保留Bot/schedule/memory及用户数据**（原版 R；fork：未迁；[E18](MIGRATION-EVIDENCE.md#e18)）。验收：schema与文件内容保留；fork建立自身版本兼容合同。
 
