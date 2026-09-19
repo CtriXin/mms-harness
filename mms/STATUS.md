@@ -8,7 +8,7 @@
 - 怎么继续干活、什么时候必须停下来问人，见 [HANDOFF.md](HANDOFF.md)。
 - 每次改动后必跑的检查见 [SYNC-GATE.md](SYNC-GATE.md)。
 
-**版本**：fork `CtriXin/mms-harness` 的 `mms` 分支 `ff39e0aefd`。
+**版本**：fork `CtriXin/mms-harness` 的 `mms` 分支 `e96d5897fb`（ff39e0aefd 起 gate 代码未变，之后主要为文档；含 §5 机主侧优先序）。
 
 **host**：npm 上固定版本的 `@deepseek-ai/dsh` `0.1.6-alpha.2`。fork 只提供前端产物和 MMS 自有插件，host 版本不跟着 fork 走。
 
@@ -117,7 +117,49 @@ python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.co
 6. **持久 Bot 与长期记忆**（C16，9 项）以及计划步骤指定模型（C17，6 项）：上游没有这个概念，是最大的一块。
 7. 其余几组：项目资料（C04）、成果预览（C05）、Skills 任务包（C06）、失败接续资料（C08.05/.06）、通知送达（C20）、Windows（C22），都还没开始。
 
-## 5. 已知限制和没验证的环境
+## 5. 机主侧优先序（2026-09-19 · 参谋长试用反馈）
+
+来源：Grok Bot「参谋长」在云侧起服、Oracle New API 路由冒烟、以及派「爪子」对着 harness/DSH 执行任务后的反馈。**不是**机主本人全日用 3092 写业务后的结论；排期以「Mac 可关、执行层降压、国产模型干活」为准，不要按迁移清单条目数从前往后啃。
+
+### 5.1 已有且真有用（留着）
+
+- 读 MMS 通道/凭据，缺 key 就停
+- 会话内切模型不改全局默认
+- effort 真进请求（k3/glm 干活要 max effort）
+- 停止即结束后台 job，不再自己醒来
+- 升级/回滚带预检与恢复
+- 项目按名字或路径打开
+
+### 5.2 未做 / 半做里：下一刀优先（真有用）
+
+1. **忙碌态排队 / 插话 / 停止三态验全**（C13.03 一带）——长任务最容易踩
+2. **连接横幅防抖、错误分流、失败原因可读**——New API / temperature / 401 要一眼能懂
+3. **模型级可用性**（哪个模型为什么不能用）——M3/k3/glm/qwen 混用时必要
+4. **Linux / 云正式验收**（启动器、`ps`/`ifconfig`、真开聊）——「Mac 可关」的硬前提；STATUS §5 仍写未验的要补成支持声明
+5. **指令结果卡片可点链接 / 渲染 Markdown**（`/btw` `/recipe` `/remote`）
+6. **`/btw` 取消与主任务互不影响 + 折叠状态跨刷新保留**
+
+### 5.3 有用，可第二批
+
+- Fleet 多模型并行（已有爪子问 GPT/Claude，不急着在 harness 再造）
+- 其他 CLI 的私有 HOME 隔离
+- 成果预览 / 项目资料 / Skills 任务包
+- 手机真机 + 真实跨网（桌面指挥为主时属增强）
+
+### 5.4 可有可无 / 易与现有栈重叠（先压着）
+
+- **持久 Bot + 长期记忆（C16）**——与 Grok Bot 角色重叠，除非明确要在 harness 里再养 bot
+- **独立周期日程（C18）**——已有 Grok Bot routines，再做一套同步成本高
+- 计划步骤指定模型大块（C17）、Windows、历史会话大搬家
+- 390px / 44px 触控等界面细节——排在云稳定与队列三态之后
+
+### 5.5 给下一刀的一句话
+
+最小闭环已经可试用。122 未开工**不要**当完成度百分比。对机主更划算的顺序是：**云/Linux 当真可用 → 忙碌队列与错误可读 → 旁问/远程体验**；Fleet、Bot、日程除非试用后明确喊痛再开。
+
+---
+
+## 6. 已知限制和没验证的环境
 
 - **host 版本固定**：同步上游源码以后，新前端可能用到旧 host 没有的接口。gate 的 W1 和 L1–L9 就是为此设的。
 - **没验证的环境**：真手机、真实跨网访问、Windows、Linux、云电脑。
@@ -127,7 +169,7 @@ python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.co
 - **指令结果卡片按纯文本显示**：`/btw`、`/recipe`、`/remote` 的结果里，链接点不了，Markdown 也不渲染。
 - 上游文件被直接改动的还剩 7 处，都登记在 [UPSTREAM-PATCHES.md](UPSTREAM-PATCHES.md)。
 
-## 6. 等机主决定的
+## 7. 等机主决定的
 
 | 事项 | 建议 |
 |---|---|
@@ -135,7 +177,7 @@ python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.co
 | 要不要导入 Pilot 和命令行的旧会话历史（C08.02/.03/.08） | 等试用后再定 |
 | 本机旧备份 `~/.local/share/mms-harness-before-*`（每份都含完整 runtime） | 试用没问题的话，只留最新一份 |
 
-## 7. 本轮新增的文件（给接手的人）
+## 8. 本轮新增的文件（给接手的人）
 
 | 文件 | 是什么 |
 |---|---|
