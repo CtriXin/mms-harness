@@ -187,7 +187,8 @@ def upgrade_check(node: Path, mms_root: Path, runtime_from: Path, tmp: Path):
             raise RuntimeError('first start: ' + detail)
         for name in ('instance', 'workspace'):
             (root / name / 'gate-marker.txt').write_text(name)
-        out = run([python, str(ADAPTER / 'upgrade.py'), '--installation', str(root), '--from', str(ROOT), '--no-build', '--yes'],
+        # Through the installation's own launcher, exactly as a user runs it.
+        out = run(['/bin/sh', str(root / 'MMS Harness.command'), 'upgrade', '--from', str(ROOT), '--no-build', '--yes'],
                   env=clean_env(node), timeout=900)
         markers = lambda: all((root / n / 'gate-marker.txt').exists() for n in ('instance', 'workspace'))
         up_ok = out.returncode == 0 and commit() == head and markers() and status().get('url', '').startswith(f'http://127.0.0.1:{port}/')
@@ -195,8 +196,7 @@ def upgrade_check(node: Path, mms_root: Path, runtime_from: Path, tmp: Path):
         up_ok = up_ok and backup.is_dir()
         detail = f'upgrade={"ok" if up_ok else "FAIL " + (out.stdout + out.stderr)[-200:]}'
         (root / 'instance' / 'after-upgrade.txt').write_text('new session data')
-        out = run([python, str(ADAPTER / 'upgrade.py'), '--installation', str(root), '--rollback', '--yes'],
-                  env=clean_env(node), timeout=900)
+        out = run(['/bin/sh', str(root / 'MMS Harness.command'), 'rollback', '--yes'], env=clean_env(node), timeout=900)
         back_ok = (out.returncode == 0 and commit() == older and markers() and (root / 'instance/after-upgrade.txt').exists()
                    and status().get('url', '').startswith(f'http://127.0.0.1:{port}/'))
         detail += f' rollback={"ok" if back_ok else "FAIL " + (out.stdout + out.stderr)[-200:]}'

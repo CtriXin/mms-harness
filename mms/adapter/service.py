@@ -151,8 +151,10 @@ def remote_command(root, config, args, dsh_url):
 
 def main():
     # upgrade / rollback run as their own program: they stop and restart this service.
-    if len(sys.argv)>1 and sys.argv[1] in ('upgrade','rollback'):
-        rest=sys.argv[2:]+(['--rollback'] if sys.argv[1]=='rollback' else [])
+    # The launcher puts `--installation ROOT` before the user's arguments.
+    argv=sys.argv[1:];positional=[a for i,a in enumerate(argv) if not a.startswith('--') and (i==0 or argv[i-1]!='--installation')]
+    if positional and positional[0] in ('upgrade','rollback'):
+        rest=[a for a in argv if a!=positional[0]]+(['--rollback'] if positional[0]=='rollback' else [])
         os.execv(sys.executable,[sys.executable,str(Path(__file__).with_name('upgrade.py')),*rest])
     parser=argparse.ArgumentParser()
     parser.add_argument('action',choices=['start','stop','status','open','remote'],nargs='?',default='open')
