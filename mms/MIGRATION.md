@@ -324,7 +324,10 @@
 
 - [x] **C14.01 已有项目按名字/完整路径搜索并确认实际cwd**（原版 P；fork：已验；[E03](MIGRATION-EVIDENCE.md#e03)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：fork Host已有项目可搜；明确确认后bash pwd与选择一致。
 - [x] **C14.02 路径直达、打开focus、无效路径不误采用旧目录**（原版 R；fork：已验；[E08](MIGRATION-EVIDENCE.md#e08)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：路径加载失败保留错误，旧异步响应不覆盖新输入。
-- [ ] **C14.03 记住上次项目、MMS项目历史与可选zoxide历史**（原版 P；fork：未迁；[E03](MIGRATION-EVIDENCE.md#e03)）。验收：复用已有记录；不要求用户重新添加全部项目，不新增必装依赖。
+- [x] **C14.03 记住上次项目、MMS项目历史与可选zoxide历史**（原版 P；fork：已迁 2026-09-20；[E03](MIGRATION-EVIDENCE.md#e03)）。验收：复用已有记录；不要求用户重新添加全部项目，不新增必装依赖。
+  - 实现：`ui-mms` node 半边的 `mmsProjects/search`（`zoxide query`，不起 shell、2s 超时、只读），与对话框本地匹配的已添加项目合并去重；没装 zoxide 或查不到时静默退回原有路径。
+  - 实例 HOME 是隔离的，所以 `run.py` 只读透传 `_ZO_DATA_DIR` 指向机主自己的 zoxide 数据库（macOS 在 `~/Library/Application Support/zoxide`，不是 XDG 路径）；不含任何凭据，也不回写。
+  - 实测（3199 隔离实例，2026-09-20）：`down` → Downloads / ptc-v5-download1；`multi` → multi-model-switch 等；`harness` → mms-harness；回车直接打开，工作区落到 mms-harness，无需再点「打开」。
 - [ ] **C14.04 应用内主机目录树、根目录/隐藏项/新建目录**（原版 R；fork：部分；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：fork基础browser已有；手机主机树、不同OS与权限逐项验。
 - [ ] **C14.05 同名文件夹通过内容指纹定位原路径**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：多候选让用户选；只按名称不能擅自命中其他目录。
 - [ ] **C14.06 目录树键盘、每层截断提示、取消与390px路径**（原版 R；fork：部分；[E09](MIGRATION-EVIDENCE.md#e09)）。验收：ArrowLeft/Right真实接线；折叠提示消失，完整路径仍可辨。

@@ -125,10 +125,10 @@ python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.co
 
 - 读 MMS 通道/凭据，缺 key 就停
 - 会话内切模型不改全局默认
-- effort 真进请求（k3/glm 干活要 max effort）
+- effort 真进请求（k3/glm 干活要 max effort）；模型选择按 系列 → 模型 → 通道 折叠，effort 只列所选通道真实声明的档位
 - 停止即结束后台 job，不再自己醒来
 - 升级/回滚带预检与恢复
-- 项目按名字或路径打开
+- 项目按名字或路径打开（含 zoxide 常用目录：输入 `down` 命中 Downloads，回车直接打开，2026-09-20 实测）
 
 ### 5.2 未做 / 半做里：下一刀优先（真有用）
 
