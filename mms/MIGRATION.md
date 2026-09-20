@@ -188,7 +188,11 @@
 - [x] **C07.02 认证 token、Host/Origin 与无凭据拒绝**（原版 R；fork：已验，gate O6 + 端到端，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：读写/附件/批准均鉴权；不因开放监听绕过保护。
 - [x] **C07.03 二维码与远程地址使用入口**（原版 P；fork：已验，本机限定扫码页，二维码解码逐字核对，口令不进会话日志；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：二维码连接正确地址；敏感 token 不进入公开日志。
 - [x] **C07.04 开启远程或轮换 token 后当前窗口不断登录**（原版 R；fork：已验，2026-09-19 `remote.mjs`：手机上执行 `/remote rotate` 时，网关发现口令在这次请求中变了，就给这台设备下发新 cookie，其他设备和旧链接立即失效。开启远程是在电脑本机窗口里做的，本来就不经过网关。O6 真实 socket 测试，去掉交接逻辑后变红；真手机未测；应用内轮换未做；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：当前窗口 cookie 正确更新，旧 token/无 cookie 拒绝。
-- [ ] **C07.05 外网使用引导位于远程总开关下**（原版 P；fork：部分，`remote status` 与 REMOTE.md 给出 Tailscale / 隧道引导，未实测跨网；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：说明实际可用入口；不能把引导当成已部署公网隧道。
+- [ ] **C07.05 外网使用引导位于远程总开关下**（原版 P；fork：部分，2026-09-20 加了 `remote tunnel` 模式与准确文案，隧道域名已建但跨网未实测；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：说明实际可用入口；不能把引导当成已部署公网隧道。
+  - `remote tunnel`：网关起，但**不绑局域网地址**。隧道从 `127.0.0.1` 进来，而那个地址网关总是绑的——此前想用隧道必须 `remote on`，为一个外网功能白付一层局域网暴露。
+  - Tailscale 其实一直可用却没人知道：`lanAddresses()` 返回所有非内部 IPv4，本来就含 `100.64.0.0/10`。但 `remote status` 把它和路由器地址一样标成「局域网」，等于把唯一一个已经能跨网的地址藏在了不能跨网的那堆里。现在标 `Tailscale`，`address_kind()` 与 `remote.mjs` 的扫码页同一套判定。
+  - 原文案「用 Tailscale 或 SSH 转发把本机 127.0.0.1:端口 接出去」是错的：Tailscale 不需要任何转发。
+  - **仍未做**：跨网实测。隧道 `harness` 已建（`cloudflared tunnel create`），但 `route dns` 报 `Authentication error`——`~/.cloudflared/cert.pem` 绑的 zoneID 已经查不到（API 返回 `Invalid zone identifier`），需要机主重跑 `cloudflared tunnel login` 或在面板手加 CNAME。每条隧道自己的凭据正常，不用重建。
 - [ ] **C07.06 移动端弹层、visualViewport 与软键盘适配**（原版 P；fork：部分；[E08](MIGRATION-EVIDENCE.md#e08)）。验收：390px 已验目录/effort；真实手机键盘和内置浏览器仍需独立验收。
 - [ ] **C07.07 远程模式下升级/回滚认证保持**（原版 R；fork：部分，2026-09-19 `mms/adapter/upgrade.py`，launcher `upgrade` / `rollback`；gate O10、L8：升级和回滚都带上 remote/ 口令，手机不用重新扫码；开着远程时的端到端未测；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：guardian仅用当前实例token，拒绝其他凭据/代理/重定向。
 

@@ -90,6 +90,8 @@ def offline(node: Path, build: bool, runtime_from: Path):
     out = run([str(node), '--test', 'test_remote.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
     record('O6 remote gateway, QR page, /remote (C07.01-.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])
+    out = run([sys.executable, '-m', 'pytest', '-q', 'test_service.py'], cwd=ADAPTER, env=env)
+    record('O12 remote modes (C07.01/.05)', 'PASS' if out.returncode == 0 else 'FAIL', out.stdout.strip().splitlines()[-1:][0] if out.stdout.strip() else out.stderr[-300:])
     out = run([str(node), '--test', 'test_stop.mjs'], cwd=ADAPTER, env=env)
     tail = [l.strip('ℹ# ').strip() for l in out.stdout.splitlines() if re.match(r'^(ℹ|#) (pass|fail) ', l)]
     record('O7 stop kills owned jobs (C13.03)', 'PASS' if out.returncode == 0 else 'FAIL', ' '.join(tail) or out.stdout[-300:])

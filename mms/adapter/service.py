@@ -114,12 +114,29 @@ def lan_addresses():
     return sorted({a for a in re.findall(r'inet (\d+\.\d+\.\d+\.\d+)', out) if not a.startswith('127.')})
 
 
+def address_kind(address):
+    """Which network an address actually reaches, as the operator must read it.
+
+    100.64.0.0/10 is carrier-grade NAT space, which is where Tailscale puts its
+    addresses. Calling that one 「局域网」 hid the one address that already
+    works from anywhere: the same label as the router-local ones, so nobody
+    could tell it apart. remote.mjs labels the QR page the same way.
+    """
+    octets = address.split('.')
+    return 'Tailscale' if octets[0] == '100' and 64 <= int(octets[1]) < 128 else '局域网'
+
+
 def remote_command(root, config, args, dsh_url):
     data = remote_settings(root, config)
     folder, _, token, _, _ = remote_paths(root)
     action = args.remote_action
     if action == 'on':
         data['mode'] = 'lan'; save_remote(root, data)
+    elif action == 'tunnel':
+        # A tunnel reaches DSH through 127.0.0.1, which the gateway always
+        # binds, so serving one never needed the LAN listener that `on`
+        # opens. Off-LAN access used to cost an exposure nobody asked for.
+        data['mode'] = 'tunnel'; save_remote(root, data)
     elif action == 'off':
         data['mode'] = 'off'; save_remote(root, data); stop_gateway(root)
     elif action == 'rotate':
@@ -132,19 +149,29 @@ def remote_command(root, config, args, dsh_url):
         hosts = set(data['hostnames'])
         hosts.add(name) if action == 'add-host' else hosts.discard(name)
         data['hostnames'] = sorted(hosts); save_remote(root, data)
-    if action in ('on', 'add-host', 'remove-host') and dsh_url:
+    if action in ('on', 'tunnel', 'add-host', 'remove-host') and dsh_url:
         start_gateway(root, config, dsh_url)
     data = remote_settings(root, config)
-    print(f"远程访问：{'开启（局域网）' if data['mode'] == 'lan' else '关闭'}；网关{'运行中' if gateway_running(root) else '未运行'}；端口 {data['port']}")
-    if data['mode'] != 'lan':
+    label = {'lan': '开启（局域网 + 隧道）', 'tunnel': '开启（仅隧道）'}.get(data['mode'], '关闭')
+    print(f"远程访问：{label}；网关{'运行中' if gateway_running(root) else '未运行'}；端口 {data['port']}")
+    if data['mode'] == 'off':
+        # A hostname registered while off is kept, and saying so beats looking
+        # like the registration was dropped.
+        for name in data['hostnames']:
+            print(f'  已登记隧道域名（未开启）：{name}')
+        print('  开启：remote tunnel（只走隧道，局域网上不监听）或 remote on（同时开局域网）。')
         return
     key = token.read_text().strip()
-    for address in lan_addresses():
-        print(f"  局域网：http://{address}:{data['port']}/?{'k'}={key}")
+    if data['mode'] == 'lan':
+        for address in lan_addresses():
+            print(f"  {address_kind(address)}：http://{address}:{data['port']}/?{'k'}={key}")
     for name in data['hostnames']:
         print(f"  隧道：https://{name}/?k={key}")
     print('  拿到这个链接的人可以在这台电脑上执行命令。只发给自己的设备；泄露后运行 remote rotate。')
-    print(f"  外网使用：用 Tailscale 或 SSH 转发把本机 127.0.0.1:{data['port']} 接出去，再用 remote add-host 登记隧道域名。")
+    if not data['hostnames']:
+        print(f"  隧道：把 cloudflared 指向 127.0.0.1:{data['port']}，再 remote add-host <域名> 登记。")
+    print('  Tailscale 的地址不需要端口转发，也不需要隧道：手机登进同一个 tailnet 就能用，'
+          '但要 remote on，因为 remote tunnel 不在那个地址上监听。')
     if not dsh_url:
         print('  MMS Harness 未运行；启动后网关自动开启。')
 
@@ -158,7 +185,7 @@ def main():
         os.execv(sys.executable,[sys.executable,str(Path(__file__).with_name('upgrade.py')),*rest])
     parser=argparse.ArgumentParser()
     parser.add_argument('action',choices=['start','stop','status','open','remote'],nargs='?',default='open')
-    parser.add_argument('remote_action',nargs='?',choices=['status','on','off','rotate','add-host','remove-host'],default='status')
+    parser.add_argument('remote_action',nargs='?',choices=['status','on','tunnel','off','rotate','add-host','remove-host'],default='status')
     parser.add_argument('value',nargs='?')
     parser.add_argument('--installation',type=Path,required=True)
     args=parser.parse_args()

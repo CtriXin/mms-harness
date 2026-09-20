@@ -6,7 +6,8 @@
 
 在对话框输入：
 
-- `/remote on`：开启。
+- `/remote on`：开启局域网 + 隧道。
+- `/remote tunnel`：只开隧道。网关照常起，但**局域网上不监听**——隧道是从 `127.0.0.1` 进来的，本来就不需要局域网那一层。手机在外网用隧道时选这个。
 - `/remote status`：查看状态。
 - `/remote rotate`：更换口令。在手机上执行也不会把这台手机踢下线：它会直接拿到新口令，其他设备和旧链接立即失效。
 - `/remote off`：关闭。
@@ -25,6 +26,30 @@ mms-harness remote add-host <隧道域名>   # 外网：登记 Tailscale / Cloud
 
 `mms-harness` 由 `install.py --shortcuts` 链到 `~/.local/bin`；没有它就直接跑
 `~/.local/share/mms-harness/MMS Harness.command`，参数一样。
+
+## 外网：两条路
+
+**Tailscale**：不用隧道，也不用端口转发。网关绑定所有非内部 IPv4，其中就包括
+Tailscale 给的 `100.64.0.0/10` 地址，扫码页和 `remote status` 会把它标成
+`Tailscale` 而不是 `局域网`。手机登进同一个 tailnet 就能用。要 `remote on`
+（`remote tunnel` 不在那个地址上监听），但不暴露公网。
+
+**Cloudflare 隧道**：手机不用装任何东西。一次性设置——
+
+```bash
+cloudflared tunnel create harness
+cloudflared tunnel route dns harness harness.你的域名     # 需要 zone 权限的 cert.pem
+mms-harness remote add-host harness.你的域名
+mms-harness remote tunnel
+cloudflared tunnel run --url http://127.0.0.1:3093 harness   # 端口见 remote status
+```
+
+`route dns` 报 `Authentication error` 说明 `~/.cloudflared/cert.pem` 绑的 zone
+已经失效：重跑一次 `cloudflared tunnel login` 选对 zone，或者直接在 Cloudflare
+面板加一条 CNAME 指向 `<隧道ID>.cfargotunnel.com` 并开代理。每条隧道自己的
+`<id>.json` 凭据不受影响，不用重建隧道。
+
+隧道要长期可用得装成系统服务（`cloudflared service install`），否则终端一关就断。
 
 手机打开链接后，口令会换成一个 HttpOnly cookie，地址栏里的口令随即去掉。之后直接打开 `http://<地址>:<端口>/` 就行。**电脑重启、服务重启都不需要重新扫码**，除非运行过 `rotate`。
 
