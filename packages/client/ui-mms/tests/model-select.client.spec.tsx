@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -220,7 +220,7 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
   })
 
-  it('portals the placed menu card to body and closes only on truly-outside mousedown', () => {
+  it('portals the placed menu card to body and closes only on a truly-outside press', () => {
     const offsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')!
     const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')!
     Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 200 })
@@ -246,11 +246,13 @@ describe('ModelSelect reasoning effort', () => {
       expect(menu.style.left).toBe('12px')
       expect(menu.style.top).toBe('12px')
       // Interactions inside the trigger subtree or the portaled card stay open.
-      fireEvent.mouseDown(menu)
-      fireEvent.mouseDown(trigger)
-      fireEvent.blur(trigger, { relatedTarget: menu })
+      // `pointerdown`, because a touch never reports the `mousedown` this once
+      // listened for until after the tap settles, if at all.
+      fireEvent.pointerDown(menu)
+      fireEvent.pointerDown(trigger)
+      fireEvent.focusOut(trigger, { relatedTarget: menu })
       expect(screen.getByRole('menu')).toBeTruthy()
-      fireEvent.mouseDown(document.body)
+      fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).toBeNull()
     } finally {
       Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offsetWidth)
@@ -703,6 +705,41 @@ describe('MMS family / model / channel walk', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /选择推理等级/ })).toBeNull()
     })
+  })
+})
+
+describe('MMS on a touch screen', () => {
+  const groups: ModelDirectoryState['groups'] = [
+    { id: 'face-tokyo', name: 'newapi-tokyo', models: [
+      { id: 'MiniMax-M3', name: 'MiniMax-M3' },
+      { id: 'deepseek-v4', name: 'deepseek-v4' },
+    ] },
+  ]
+
+  function seat() {
+    render(<ModelSelect locked={false} available
+      directory={createSnapshotStore<ModelDirectoryState>(state({ groups, current: null }))} ranks={[]}
+      load={vi.fn()} select={vi.fn()} makeDefault={noDefault} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+  }
+
+  it('keeps the menu open when a tap lands inside the card', async () => {
+    seat()
+    const family = screen.getByRole('menuitem', { name: /MiniMax/ })
+    // A touch reports `pointerdown`; the compatibility `mousedown` arrives only
+    // after the tap settles, if at all, so dismissal cannot be driven by it.
+    fireEvent.pointerDown(family)
+    fireEvent.click(family)
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByRole('menu')).toBeTruthy()
+    expect(screen.getAllByRole('menuitemradio').map(row => row.textContent))
+      .toEqual([expect.stringContaining('MiniMax-M3')])
+  })
+
+  it('closes when the press really is outside', async () => {
+    seat()
+    fireEvent.pointerDown(document.body)
+    await waitFor(() => { expect(screen.queryByRole('menu')).toBeNull() })
   })
 })
 

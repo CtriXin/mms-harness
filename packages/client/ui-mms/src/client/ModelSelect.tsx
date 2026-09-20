@@ -176,14 +176,17 @@ export function ModelSelect(
 
   useEffect(() => {
     if (!open) return
-    const closeOutside = (event: MouseEvent): void => {
+    const closeOutside = (event: Event): void => {
       // The portaled card is outside the trigger subtree; check both.
       if (rootRef.current?.contains(event.target as Node) === true) return
       if (menuRef.current?.contains(event.target as Node) === true) return
       setOpen(false)
     }
-    document.addEventListener('mousedown', closeOutside)
-    return () => { document.removeEventListener('mousedown', closeOutside) }
+    // `pointerdown`, not `mousedown`: a touch reports the press directly,
+    // while the compatibility `mousedown` arrives only after the tap settles —
+    // and only sometimes.
+    document.addEventListener('pointerdown', closeOutside)
+    return () => { document.removeEventListener('pointerdown', closeOutside) }
   }, [open])
 
   // A pane switch unmounts the row that had focus, which drops focus onto the
@@ -347,13 +350,21 @@ export function ModelSelect(
 
   const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
     if (event.relatedTarget instanceof Node && inCard(event.relatedTarget)) return
-    // A programmatic focus() — which is how a pane hands the keyboard to its
-    // search field — reports no relatedTarget in some engines, so where focus
-    // actually landed decides. Judged after the move settles; an outside click
-    // is closed by the mousedown listener regardless.
+    // No relatedTarget means focus was dropped rather than handed on, and the
+    // two ways that happens are opposite. A programmatic focus() between panes
+    // reports none in some engines. So does tapping a button on iOS, which
+    // does not focus it at all: the search field blurs, nothing takes focus,
+    // and reading that as "left the card" closed the menu on the very tap that
+    // was choosing a family — the whole seat was unusable on a phone.
+    //
+    // Focus landing on nothing is therefore not a reason to close. A press
+    // that really is outside is closed by the pointerdown listener, and a
+    // keyboard Tab away always names where it went.
     if (event.relatedTarget === null) {
       queueMicrotask(() => {
-        if (!inCard(document.activeElement)) close()
+        const landed = document.activeElement
+        if (landed === null || landed === document.body) return
+        if (!inCard(landed)) close()
       })
       return
     }
