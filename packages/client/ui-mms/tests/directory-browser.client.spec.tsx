@@ -1761,22 +1761,76 @@ describe('DirectoryBrowser', () => {
 
 
 describe('MMS project lookup', () => {
-  it('focuses project search and browses a matching project before explicit confirmation', async () => {
+  it('focuses project search and opens the match on Enter, with no second confirmation', async () => {
     const picked = vi.fn()
     const listDirectory = vi.fn(async (path?: string) => listingFor(path))
     render(<DirectoryBrowser open busy={false} listDirectory={listDirectory}
       createDirectory={vi.fn()} onOpen={picked} onClose={vi.fn()} t={key => key}
       recentDirectories={[{ name: 'Pilot', path: HARNESS }, { name: 'Documents', path: DOCS }]} />)
-    const search = screen.getByRole('textbox', { name: 'browser.searchProjects' })
+    const search = screen.getByRole('combobox', { name: 'browser.searchProjects' })
     expect(document.activeElement).toBe(search)
     fireEvent.change(search, { target: { value: 'Pilot' } })
-    expect(screen.getByRole('button', { name: /Pilot/ })).toBeTruthy()
+    expect(screen.getByRole('option', { name: /Pilot/ })).toBeTruthy()
     fireEvent.submit(search.closest('form')!)
-    await waitFor(() => { expect(listDirectory).toHaveBeenCalledWith(HARNESS, expect.any(AbortSignal)) })
-    expect(picked).not.toHaveBeenCalled()
-    await waitFor(() => { expect(screen.getByRole<HTMLButtonElement>('button', { name: 'browser.open' }).disabled).toBe(false) })
-    fireEvent.click(screen.getByRole('button', { name: 'browser.open' }))
+    // Typing and pressing Enter IS the interaction: no navigation into the
+    // folder first, no trip to the footer's Open button afterwards.
     expect(picked).toHaveBeenCalledWith(HARNESS)
+    expect(listDirectory).not.toHaveBeenCalledWith(HARNESS, expect.any(AbortSignal))
+  })
+
+  it('clicking a match opens it, the same as Enter on it', () => {
+    const picked = vi.fn()
+    render(<DirectoryBrowser open busy={false} listDirectory={vi.fn(async (path?: string) => listingFor(path))}
+      createDirectory={vi.fn()} onOpen={picked} onClose={vi.fn()} t={key => key}
+      recentDirectories={[{ name: 'Pilot', path: HARNESS }]} />)
+    fireEvent.click(screen.getByRole('option', { name: /Pilot/ }))
+    expect(picked).toHaveBeenCalledWith(HARNESS)
+  })
+
+  it('merges the host ranking after the added projects, without repeating a path', async () => {
+    const searchProjects = vi.fn(async () => [
+      { name: 'Pilot', path: HARNESS },
+      { name: 'downloads', path: '/home/user/downloads' },
+    ])
+    render(<DirectoryBrowser open busy={false} listDirectory={vi.fn(async (path?: string) => listingFor(path))}
+      createDirectory={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} t={key => key}
+      searchProjects={searchProjects}
+      recentDirectories={[{ name: 'Pilot', path: HARNESS }]} />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'browser.searchProjects' }), { target: { value: 'o' } })
+    await waitFor(() => { expect(searchProjects).toHaveBeenCalledWith('o', expect.any(AbortSignal)) })
+    await waitFor(() => { expect(screen.getAllByRole('option')).toHaveLength(2) })
+    expect(screen.getAllByRole('option').map(row => row.textContent))
+      .toEqual([expect.stringContaining('Pilot'), expect.stringContaining('downloads')])
+  })
+
+  it('opens the arrowed-to row on Enter without touching the mouse', async () => {
+    const picked = vi.fn()
+    const searchProjects = vi.fn(async () => [{ name: 'downloads', path: '/home/user/downloads' }])
+    render(<DirectoryBrowser open busy={false} listDirectory={vi.fn(async (path?: string) => listingFor(path))}
+      createDirectory={vi.fn()} onOpen={picked} onClose={vi.fn()} t={key => key}
+      searchProjects={searchProjects}
+      recentDirectories={[{ name: 'Pilot', path: HARNESS }]} />)
+    const search = screen.getByRole('combobox', { name: 'browser.searchProjects' })
+    fireEvent.change(search, { target: { value: 'o' } })
+    await waitFor(() => { expect(screen.getAllByRole('option')).toHaveLength(2) })
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    expect(search.getAttribute('aria-activedescendant')).toBe(screen.getAllByRole('option')[1]!.id)
+    fireEvent.submit(search.closest('form')!)
+    expect(picked).toHaveBeenCalledWith('/home/user/downloads')
+  })
+
+  it('keeps the added projects listed when the host cannot rank', async () => {
+    const searchProjects = vi.fn(async (): Promise<readonly { name: string; path: string }[]> => {
+      throw new Error('no zoxide here')
+    })
+    render(<DirectoryBrowser open busy={false} listDirectory={vi.fn(async (path?: string) => listingFor(path))}
+      createDirectory={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} t={key => key}
+      searchProjects={searchProjects}
+      recentDirectories={[{ name: 'Pilot', path: HARNESS }]} />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'browser.searchProjects' }), { target: { value: 'Pilot' } })
+    await waitFor(() => { expect(searchProjects).toHaveBeenCalled() })
+    expect(screen.getByRole('option', { name: /Pilot/ })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('does not adopt an invalid pasted path or an IME confirmation', async () => {
@@ -1784,7 +1838,7 @@ describe('MMS project lookup', () => {
     const listDirectory = vi.fn(async (path?: string) => listingFor(path))
     render(<DirectoryBrowser open busy={false} listDirectory={listDirectory}
       createDirectory={vi.fn()} onOpen={picked} onClose={vi.fn()} t={key => key} />)
-    const search = screen.getByRole('textbox', { name: 'browser.searchProjects' })
+    const search = screen.getByRole('combobox', { name: 'browser.searchProjects' })
     await waitFor(() => { expect(listDirectory).toHaveBeenCalled() })
     fireEvent.change(search, { target: { value: '/missing-project' } })
     fireEvent.compositionStart(search)

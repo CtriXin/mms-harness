@@ -18,7 +18,6 @@ import { ModelDirectoryResolver } from '@deepseek-ai/dsh-client-ui-model-selecti
 import { apply, inject } from '../src/client/index.ts'
 import { MmsBrandName } from '../src/client/Brand.tsx'
 import type { MmsModelSeatInjected } from '../src/client/ModelSelect.tsx'
-import { apply as nodeApply } from '../src/index.ts'
 
 usePinnedBrowserLanguages('zh-CN')
 afterEach(() => { cleanup(); vi.unstubAllEnvs() })
@@ -165,7 +164,7 @@ describe('ui-mms client half', () => {
       await expect(face.listDirectory()).resolves.toBe(listing)
       await expect(face.createDirectory(HOME, 'x')).resolves.toBe(`${HOME}/x`)
       expect(face.t('browser.title')).toBe('找到你的项目')
-      expect(face.t('browser.searchProjects')).toBe('搜索项目名或输入文件夹路径')
+      expect(face.t('browser.searchProjects')).toBe('输入文件夹名或路径，回车直接打开')
     }
   })
 
@@ -205,11 +204,5 @@ describe('MmsBrandName', () => {
     vi.stubEnv('DSH_CLIENT_GIT_DIRTY', 'false')
     render(<MmsBrandName t={t as never} />)
     expect(screen.getByText('0.1.6')).toBeTruthy()
-  })
-})
-
-describe('ui-mms node half', () => {
-  it('the node apply is an inert loader seat', () => {
-    expect(() => { nodeApply() }).not.toThrow()
   })
 })

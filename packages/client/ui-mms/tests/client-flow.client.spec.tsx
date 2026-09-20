@@ -35,6 +35,7 @@ describe('project dialog flow adapter', () => {
         {...props}
         listDirectory={listDirectory}
         createDirectory={vi.fn(async () => '')}
+        searchProjects={vi.fn(async () => [])}
         t={t}
       />,
     )
@@ -55,6 +56,7 @@ describe('project dialog flow adapter', () => {
         {...owner({ open: false })}
         listDirectory={vi.fn(async () => homeListing)}
         createDirectory={vi.fn(async () => '')}
+        searchProjects={vi.fn(async () => [])}
         t={key => key}
       />,
     )

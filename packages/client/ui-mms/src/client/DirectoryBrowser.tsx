@@ -34,7 +34,7 @@
  * the crumbs name where the walk ended, and Open's fallback target follows
  * them.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   Button, IconCheckOutline16, IconChevronRightOutline14, IconEditOutline16, IconFolderClose16, IconFolderOpen16,
@@ -63,6 +63,12 @@ export interface DirectoryBrowserProps {
    * business message over the ordinary Error text.
    */
   createDirectory: (path: string, name: string) => Promise<string>
+  /**
+   * Rank folders matching what was typed, beyond `recentDirectories` (the
+   * Host's zoxide frecency). Optional and failure-tolerant: without it the
+   * search box still filters the projects already added here.
+   */
+  searchProjects?: (query: string, signal?: AbortSignal) => Promise<readonly { name: string; path: string }[]>
   /** The operator confirmed a directory (the selection, else the listed level). */
   onOpen: (path: string) => void
   /** Close without picking (mask, Escape, Cancel). */
@@ -82,6 +88,20 @@ function failureText(error: unknown): string {
   }
   return error instanceof Error ? error.message : String(error)
 }
+
+/**
+ * How long a keystroke rests before the Host ranks folders for it. Short
+ * enough that the list still feels typed-into, long enough that a burst of
+ * keystrokes costs one ranking call instead of one per character.
+ */
+const PROJECT_SEARCH_DEBOUNCE_MS = 120
+
+/**
+ * Rows the match list shows. The list is a shortcut, not a browser: past
+ * roughly this many rows scanning them costs more than typing one more
+ * letter, and a taller list pushes the folder tree off a laptop screen.
+ */
+const PROJECT_ROWS = 8
 
 /**
  * How long a scan may stay visually silent before the floating "Loading…"
@@ -273,9 +293,18 @@ function LevelColumn({ entries, selectedPath, busy, onPick, showHidden, filterPr
  * @returns the dialog element (null while closed, via Modal).
  */
 export function DirectoryBrowser({
-  open, listDirectory, createDirectory, onOpen, onClose, busy, t, recentDirectories = [],
+  open, listDirectory, createDirectory, searchProjects, onOpen, onClose, busy, t, recentDirectories = [],
 }: DirectoryBrowserProps) {
   const [projectQuery, setProjectQuery] = useState('')
+  // Host-ranked matches for the current query (zoxide frecency), merged after
+  // the already-added projects. Enhancement only: it stays empty when the
+  // Host cannot rank, and the dialog behaves exactly as it did before.
+  const [ranked, setRanked] = useState<readonly { name: string; path: string }[]>([])
+  // Keyboard cursor into the merged match list: the whole point of the box is
+  // to type a few letters and press Enter without reaching for the mouse.
+  const [choice, setChoice] = useState(0)
+  // Stable per-dialog prefix for the combobox/listbox wiring below.
+  const dialogId = useId()
   // Miller state: the listed level, the selected row in it, and the selected
   // folder's own listing (the right column; null while nothing is selected).
   const [parent, setParent] = useState<DirectoryListing | null>(null)
@@ -755,6 +784,28 @@ export function DirectoryBrowser({
     }
   })
 
+  // Host ranking for the typed query. Debounced (one ranking per pause, not
+  // per keystroke) and aborted on supersession, so a fast typist leaves no
+  // pile of child processes behind. A failure is silence: the already-added
+  // projects below are matched locally and keep answering either way.
+  useEffect(() => {
+    const query = projectQuery.trim()
+    if (!open || searchProjects === undefined || query === '') {
+      setRanked([])
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      searchProjects(query, controller.signal).then((rows) => {
+        if (!controller.signal.aborted) setRanked(rows)
+      }).catch(() => { /* ranking is an enhancement; the dialog stays usable */ })
+    }, PROJECT_SEARCH_DEBOUNCE_MS)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [open, projectQuery, searchProjects])
+
   if (!open) return null
   const twoPane = selected !== null
   // The nested create dialog owns the interaction while open: Modal has no
@@ -765,8 +816,16 @@ export function DirectoryBrowser({
   // committing actions must not act on the previous selection/listing while
   // a different path is displayed.
   const draftPending = pathDraft !== null || projectQuery.trim() !== ''
-  const projectMatches = recentDirectories.filter(project =>
-    `${project.name} ${project.path}`.toLowerCase().includes(projectQuery.trim().toLowerCase())).slice(0, 6)
+  // Already-added projects first (they carry the operator's own title and are
+  // matched locally, so they appear on the keystroke itself); the Host's
+  // frecency ranking fills the rest, minus anything already listed.
+  const added = recentDirectories.filter(project =>
+    `${project.name} ${project.path}`.toLowerCase().includes(projectQuery.trim().toLowerCase()))
+  const listed = new Set(added.map(project => project.path))
+  const projectMatches = [...added, ...ranked.filter(row => !listed.has(row.path))].slice(0, PROJECT_ROWS)
+  // A settled ranking can be shorter than the cursor that was moved over the
+  // previous one; clamp for this render instead of chasing it with an effect.
+  const cursor = projectMatches.length === 0 ? -1 : Math.min(choice, projectMatches.length - 1)
 
   return (
     <Modal
@@ -826,23 +885,57 @@ export function DirectoryBrowser({
       >
         <div className={css.header}>
           <h2 className={css.title}>{t('browser.title')}</h2>
+          {/* Enter opens the cursored match outright rather than navigating
+            * into it and waiting for a second click on Open: typing three
+            * letters and pressing Enter is the whole interaction this box
+            * exists for. With no match at all, a typed path still commits as
+            * a navigation, which is what surfaces "no such directory"
+            * instead of silently opening something else. */}
           <form className={css.projectSearch} onSubmit={(event) => {
             event.preventDefault()
             if (parentInert || composingRef.current || !projectQuery.trim()) return
-            navigate(projectMatches.length === 1 ? projectMatches[0]?.path : projectQuery.trim())
+            const picked = projectMatches[cursor]
+            if (picked !== undefined) {
+              onOpen(picked.path)
+              return
+            }
+            navigate(projectQuery.trim())
           }}>
             <input autoFocus aria-label={t('browser.searchProjects')}
               placeholder={t('browser.searchProjects')} value={projectQuery} disabled={parentInert}
-              {...compositionGuard} onChange={(event) => {
+              role="combobox" aria-expanded={projectMatches.length > 0} aria-controls={`${dialogId}-matches`}
+              aria-activedescendant={cursor < 0 ? undefined : `${dialogId}-match-${cursor}`}
+              {...compositionGuard}
+              onKeyDown={(event) => {
+                // Arrows drive the match list while focus stays in the input,
+                // so the hands never leave the keys. IME candidate navigation
+                // owns the arrows first.
+                if (composingRef.current || projectMatches.length === 0) return
+                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+                event.preventDefault()
+                const step = event.key === 'ArrowDown' ? 1 : -1
+                const next = (cursor + step + projectMatches.length) % projectMatches.length
+                setChoice(next)
+              }}
+              onChange={(event) => {
                 supersede()
                 setLoading(false)
                 setProjectQuery(event.target.value)
+                // A new query is a new list; the cursor belongs at its head.
+                setChoice(0)
               }} />
             <Button type="submit" disabled={parentInert || !projectQuery.trim()}>{t('browser.go')}</Button>
           </form>
-          {projectMatches.length > 0 && <div className={css.projects} aria-label={t('browser.projects')}>
-            {projectMatches.map(project => <button key={project.path} type="button" disabled={parentInert}
-              title={project.path} onClick={() => { navigate(project.path) }}>
+          {/* A click opens the row, matching what Enter does on it — the list
+            * is a list of destinations, not of folders to step into. */}
+          {projectMatches.length > 0 && <div className={css.projects} id={`${dialogId}-matches`}
+            role="listbox" aria-label={t('browser.projects')}>
+            {projectMatches.map((project, index) => <button key={project.path} type="button"
+              id={`${dialogId}-match-${index}`} role="option" aria-selected={index === cursor}
+              className={clsx(index === cursor && css.projectCursor)}
+              disabled={parentInert} title={project.path}
+              onMouseEnter={() => { setChoice(index) }}
+              onClick={() => { onOpen(project.path) }}>
               <IconFolderClose16 /><span>{project.name}<small>{project.path}</small></span>
             </button>)}
           </div>}

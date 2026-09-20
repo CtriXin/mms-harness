@@ -18,6 +18,12 @@ export interface BrowseFlowInjected {
   listDirectory: (path?: string, signal?: AbortSignal) => Promise<DirectoryListing>
   /** Create one child directory under an existing parent. */
   createDirectory: (path: string, name: string) => Promise<string>
+  /**
+   * Rank folders matching what was typed, beyond the projects already added
+   * here (the Host's zoxide frecency). Answers an empty list rather than
+   * failing when the Host cannot rank, so the dialog stays usable without it.
+   */
+  searchProjects: (query: string, signal?: AbortSignal) => Promise<readonly { name: string; path: string }[]>
   /** Localized dialog copy (this package's namespace). */
   t: Translate
 }
@@ -40,6 +46,7 @@ export function BrowseDirectoryFlow(props: DirectoryFlowOwnerProps & BrowseFlowI
     busy: props.busy,
     listDirectory: props.listDirectory,
     createDirectory: props.createDirectory,
+    searchProjects: props.searchProjects,
     t: props.t,
     onOpen: props.onPicked,
     onClose: props.onCancel,

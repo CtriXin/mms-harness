@@ -15,9 +15,9 @@ export type MmsKey = keyof typeof zh
  */
 export const projectsZh = {
   'browser.title': '找到你的项目',
-  'browser.searchProjects': '搜索项目名或输入文件夹路径',
-  'browser.projects': '已有项目',
-  'browser.go': '前往',
+  'browser.searchProjects': '输入文件夹名或路径，回车直接打开',
+  'browser.projects': '匹配的项目',
+  'browser.go': '打开',
   'browser.home': '主目录',
   'browser.newFolder': '新建文件夹',
   'browser.folderName': '文件夹名称',
@@ -34,9 +34,9 @@ export const projectsZh = {
 
 export const projectsEn: Record<keyof typeof projectsZh, string> = {
   'browser.title': 'Find your project',
-  'browser.searchProjects': 'Search projects or enter a folder path',
-  'browser.projects': 'Your projects',
-  'browser.go': 'Go',
+  'browser.searchProjects': 'Type a folder name or path; Enter opens it',
+  'browser.projects': 'Matching projects',
+  'browser.go': 'Open',
   'browser.home': 'Home',
   'browser.newFolder': 'New folder',
   'browser.folderName': 'Folder name',

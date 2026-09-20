@@ -26,6 +26,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// The node half's `mmsProjects` Remote namespace (self-reference to this
+// package's generated remote face): the import carries both the declaration
+// merge and the contribution value mounted below.
+import mmsProjectsRemote from '@deepseek-ai/dsh-client-ui-mms/remote'
 import { MmsBrandName } from './Brand.tsx'
 import { BrowseDirectoryFlow, type BrowseFlowInjected } from './flow.ts'
 import { ModelSelect, type MmsModelSeatInjected } from './ModelSelect.tsx'
@@ -84,6 +88,66 @@ export function apply(ctx: ClientContext): void {
     return () => { for (const dispose of disposers) dispose() }
   }, 'ui-mms: project dialog dictionaries')
 
+  // `@deepseek-ai/dsh-api-remotes/client` mounts a FIXED list of namespaces,
+  // and that assembly is an upstream file. Rather than edit it, this overlay
+  // mounts its own contribution here — the fork adds a namespace without
+  // touching a file upstream keeps changing.
+  //
+  // It lives in a scope that INJECTS `remote`, and so does the call itself:
+  // cordis tracks the caller, so reading `ctx.remote` from the root scope
+  // (which does not inject it) throws `cannot get property "remote" without
+  // inject`. The dialog therefore calls through this slot, which is empty
+  // until the namespace is live — a Host without `remote` still gets the
+  // brand, the model seat and the folder dialog's other paths.
+  const rankProjects: { call: BrowseFlowInjected['searchProjects'] } = { call: async () => [] }
+  ctx.inject(['remote'], (scope: ClientContext) => {
+    scope.effect(() => {
+      let dispose: (() => Promise<void>) | undefined
+      let disposed = false
+      // Through a resolved promise so a Host whose `remote` predates `$mount`
+      // throws INTO this chain instead of past it: the overlay must degrade,
+      // never take the client down with an unhandled rejection.
+      void Promise.resolve().then(() => scope.remote.$mount(mmsProjectsRemote)).then((settle) => {
+        // Disposal can win the race against the mount; the late arrival must
+        // still be released rather than left registered on a dead scope.
+        if (disposed) return settle()
+        dispose = settle
+        return undefined
+      }).catch((error: unknown) => {
+        // Degrading silently here cost hours once: the search box simply
+        // answered nothing and no surface said why. The folder dialog still
+        // works without the namespace, but the reason is now findable.
+        console.error('[mms] project search namespace unavailable:', error)
+      })
+      return () => {
+        disposed = true
+        void dispose?.()
+      }
+    }, 'ui-mms: project search namespace')
+  })
+
+  // The namespace itself must be injected too — cordis tracks `remote.<ns>`
+  // properties, not just the root service — and it only exists once the mount
+  // above lands. A SEPARATE inject waits for exactly that: nesting it inside
+  // the mounting scope would make the mount wait on its own result.
+  ctx.inject(['remote', 'remote.mmsProjects'], (ready: ClientContext) => {
+    ready.effect(() => {
+      const previous = rankProjects.call
+      rankProjects.call = async (query, signal) => {
+        try {
+          const result = await ready.remote.mmsProjects.search(query, signal)
+          if (result.ok) return result.value
+          console.error('[mms] project search failed:', result.error)
+          return []
+        } catch (error: unknown) {
+          console.error('[mms] project search threw:', error)
+          return []
+        }
+      }
+      return () => { rankProjects.call = previous }
+    }, 'ui-mms: project search call')
+  })
+
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({
     name: 'sidebar.brand.name', priority: PRIORITY, locale: NS,
   }, MmsBrandName))
@@ -92,6 +156,12 @@ export function apply(ctx: ClientContext): void {
   const injected = (): BrowseFlowInjected => ({
     listDirectory: (path, signal) => ctx.uiWorkspace.listDirectory(path, signal),
     createDirectory: (path, name) => ctx.uiWorkspace.createDirectory(path, name),
+    // Frecency ranking is an enhancement over the dialog's own project filter,
+    // never a precondition: a Host without the node half (or without zoxide)
+    // answers nothing and the dialog keeps its other paths. That is also why
+    // `mmsProjects` is not in this plugin's inject — an absent namespace must
+    // not take the brand and model seats down with it.
+    searchProjects: (query, signal) => rankProjects.call(query, signal),
     t,
   })
   // One transactional pair, like upstream's browse package: both holes or neither.

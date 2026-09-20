@@ -440,8 +440,12 @@
 .projects {
   display: flex;
   flex-direction: column;
-  max-height: 150px;
+  /* Whole rows only: a row sliced in half at the fold reads as breakage.
+   * Six rows of 44px, which is also where scanning stops being faster than
+   * typing one more letter. */
+  max-height: 264px;
   overflow-y: auto;
+  scroll-padding: 4px 0;
 }
 
 .projects button {
@@ -457,12 +461,19 @@
   cursor: pointer;
 }
 
-.projects button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.projects button:hover,
+.projectCursor { background: var(--dsw-alias-interactive-bg-hover); }
 .projects span { min-width: 0; }
 .projects small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Truncate a long path at its FRONT: the tail names the folder, the head is
+   * the part every row shares. `plaintext` keeps the separators in their
+   * logical order while the overflow moves to the other end. */
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
   color: var(--dsw-alias-label-secondary);
 }
