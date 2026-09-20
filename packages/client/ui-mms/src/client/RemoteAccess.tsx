@@ -125,9 +125,10 @@ export function RemoteAccess({ t, load, setMode }: RemoteAccessProps) {
                 {state.links.map(link => (
                   <li key={link.url}>
                     <span className={css.reachLabel}>{labelOf(link.kind)}</span>
-                    {/* Selectable, so it can be copied by hand when the
-                        clipboard API is unavailable (a non-secure origin). */}
-                    <span className={css.reachValue}>{link.url}</span>
+                    {/* The full URL is the text; only its tail is elided by
+                        CSS, so selecting or copying still takes all of it,
+                        which is what a missing clipboard API falls back to. */}
+                    <span className={css.reachValue} title={link.url}>{link.url}</span>
                     <button
                       type="button"
                       className={css.copy}

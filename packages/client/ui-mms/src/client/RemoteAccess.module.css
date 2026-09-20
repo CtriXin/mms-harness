@@ -1,10 +1,13 @@
-/* Remote-access row: title, a three-way segmented switch, then what is
- * reachable. Same column shape and hairline as the other General rows. */
+/* Remote-access row: title, a three-way segmented switch, then the live
+ * links. One line per link, labels in a shared column so the addresses line
+ * up, and the token tail elided rather than wrapped — it is 43 characters
+ * nobody reads, and wrapping it three times buried everything that varies.
+ * Selecting or copying still takes the whole URL; only the drawing is short. */
 
 .group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 16px 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
@@ -16,24 +19,25 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* Segmented rather than three cubes: the states are one exclusive choice and
- * the row has to stay legible at phone width, where cubes would wrap. */
+/* Hugs its labels instead of stretching: three equal thirds of an 800px panel
+ * pushed the options so far apart they read as tabs, not as one choice. */
 .modes {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
+  display: inline-flex;
+  align-self: flex-start;
+  max-width: 100%;
+  gap: 2px;
   padding: 2px;
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--dsw-alias-fill-l2);
 }
 
 .mode {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
   box-sizing: border-box;
-  padding: 6px 10px;
+  padding: 5px 14px;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
@@ -60,52 +64,57 @@
 }
 
 .reach {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  /* Label and address columns are each sized by their widest row, so the
+   * addresses line up and the actions sit right after them instead of being
+   * flung at the panel edge. `minmax(0, max-content)` still lets the address
+   * column shrink — and elide — when the panel is narrower than it wants. */
+  grid-template-columns: auto minmax(0, max-content) auto;
+  justify-content: start;
+  align-items: baseline;
+  gap: 2px 12px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .reach li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
+  display: contents;
 }
 
 .reachLabel {
-  flex: none;
   font-size: 12px;
-  line-height: 18px;
+  line-height: 20px;
   color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.reachValue {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .copy {
-  flex: none;
   padding: 0 6px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 20px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .copy:hover {
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-fill-l2);
-}
-
-.reachValue {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
 }
 
 .note,
