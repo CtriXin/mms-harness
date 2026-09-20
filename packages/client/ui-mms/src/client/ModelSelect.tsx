@@ -1,21 +1,28 @@
 /**
  * ModelSelect: the composer's named model seat (`conversation.input.model`).
- * Two-level selection per figma 496:26454's MenuDropdown: the root menu is
- * the Model / Effort row pair (label + current value + a right chevron),
- * each drilling into its own list — the provider-grouped model list over
- * the shared directory, and the effort levels. The model trigger sits beside
- * an always-visible effort trigger that opens the levels directly.
- * While open, ↑/↓ move focus across the rows of the shown pane (wrapping; a
- * step taken while the trigger still holds focus enters at the near end), Tab
- * settles like Enter, and Escape and Shift+Tab leave a drilled pane first and
- * otherwise close back to the opening trigger. The model pane focuses its
- * search field; the effort pane focuses the current row. Returning to root
- * hands focus back to the
- * cell that opened it. Data and submission ride the SAME per-session
- * ModelDirectory as the /model popup; exact-model reasoning metadata and the
- * selected effort come from the Host rather than a client-owned vocabulary. A
- * rejected selection announces through the shared transient Toast anchored to
- * the composer card; the in-menu strip with Retry remains the catalog-load
+ *
+ * MMS publishes one provider per approved route, so the catalog arrives as a
+ * flat list where a model reachable through three channels appears three
+ * times. This seat folds it back (see ./model-groups.ts) and walks it the way
+ * the choice is actually made: family -> model -> done. The channel step
+ * exists on a model's own row and only when more than one channel could serve
+ * it; picking a model commits the channel already in use, else its primary.
+ *
+ * Opening lands on the family pane WITH THE SEARCH FIELD FOCUSED, and typing
+ * lists models directly — so a known name costs one click and one Enter, and
+ * there is no "Model / Effort" root menu to step through. Effort keeps its own
+ * always-visible trigger beside the model one.
+ *
+ * While open, up/down move focus across the rows of the shown pane (wrapping),
+ * Tab settles like Enter, and Escape and Shift+Tab step out one pane at a time
+ * before closing back to the trigger that opened the card.
+ *
+ * Data and submission ride the SAME per-session ModelDirectory as the /model
+ * popup. Reasoning metadata is read off the CHOSEN route, never a client-owned
+ * vocabulary: two channels for one model may declare different effort levels,
+ * and a channel that declares none shows no effort control at all. A rejected
+ * selection announces through the shared transient Toast anchored to the
+ * composer card; the in-menu strip with Retry remains the catalog-load
  * surface.
  */
 import {
@@ -31,6 +38,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import { foldCatalog, searchModels, type LogicalModel, type ModelFamily } from './model-groups.ts'
 
 /** Upstream's seat face plus the explicit "use for new sessions" verb (C01.06). */
 export type MmsModelSeatInjected = ModelSelectInjected & {
@@ -43,8 +51,26 @@ export type MmsModelSeatInjected = ModelSelectInjected & {
 }
 import css from './ModelSelect.module.css'
 
-/** Which pane the dropdown shows: the two-row root or one drilled-in list. */
-type Pane = 'root' | 'model' | 'effort'
+/**
+ * Which pane the dropdown shows.
+ *
+ * The seat opens on `family` — there is no root menu of "Model / Effort" rows,
+ * because effort has its own always-visible trigger and the model trigger can
+ * only mean "choose a model". That removes one click from every switch.
+ * `channel` is reached from a model's own row and is skipped entirely when a
+ * model has one channel or the primary is wanted.
+ */
+type Pane = 'family' | 'model' | 'channel' | 'effort'
+
+/** Where backing out of a pane lands; null closes the menu. */
+const PARENT_PANE: Record<Pane, Pane | null> = {
+  family: null,
+  model: 'family',
+  channel: 'model',
+  // Effort is entered from its own trigger, so leaving it closes rather than
+  // dropping the operator into a model list they never asked for.
+  effort: null,
+}
 
 /** One dynamic effort row; undefined means preserve the provider default. */
 interface EffortChoice {
@@ -72,7 +98,12 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [pane, setPane] = useState<Pane>('root')
+  const [pane, setPane] = useState<Pane>('family')
+  // Which family the model pane lists, and which model the channel pane is
+  // about. Held by name so a catalog refresh re-resolves them instead of
+  // pinning a stale object.
+  const [familyKey, setFamilyKey] = useState('')
+  const [channelModel, setChannelModel] = useState('')
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -90,6 +121,11 @@ export function ModelSelect(
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const id = useId()
 
+  // The catalog, folded back into family -> model -> channel (see
+  // ./model-groups.ts for why MMS's one-provider-per-route shape needs it).
+  const families = useMemo(() => foldCatalog(state.groups), [state.groups])
+  const shownFamily = families.find(family => family.key === familyKey)
+  const hits = useMemo(() => searchModels(families, query), [families, query])
   const choices = useMemo(() => state.groups.flatMap(group =>
     group.models.map(model => ({
       group,
@@ -149,25 +185,27 @@ export function ModelSelect(
   // sees a keystroke. Every switch therefore names where the keyboard lands:
   // drilling on the pane's current value, coming back on the cell that opened
   // the pane left.
-  const paneFocus = useRef<'drill' | 'model' | 'effort' | null>(null)
+  const paneFocus = useRef<'move' | null>(null)
   useEffect(() => {
     const intent = paneFocus.current
-    paneFocus.current = null
     if (!open || intent === null) return
-    if (intent === 'drill') {
-      // The checked row is the value in use; a pane without one opens on its
-      // first row.
-      if (pane === 'model') { searchRef.current?.focus(); return }
-      const checked = menuRef.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]:not([disabled])')
-      const target = checked ?? itemRefs.current.find(item => item !== null && !item.disabled)
-      // Rows a selection in flight disabled cannot take the keyboard; the
-      // trigger does, so the card's keys still reach the menu.
-      ;(target ?? triggerRef.current)?.focus()
-      return
-    }
-    const cell = itemRefs.current[intent === 'effort' ? 1 : 0]
-    ;(cell !== null && cell !== undefined && !cell.disabled ? cell : triggerRef.current)?.focus()
-  }, [open, pane])
+    // The card renders HIDDEN for one frame so the Menu primitive can measure
+    // it, and a `visibility: hidden` element cannot take focus — focusing
+    // there silently did nothing and the seat opened with the keyboard still
+    // on the trigger. Wait for the placement, keeping the intent until then.
+    // (jsdom does not model this, so only a real browser shows it.)
+    if (menuPos === null) return
+    paneFocus.current = null
+    // The family pane owns the search field, and landing there IS the fast
+    // path: open the seat, type three letters, press Enter. Every other pane
+    // opens on the value in use, else its first row.
+    if (pane === 'family') { searchRef.current?.focus(); return }
+    const checked = menuRef.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]:not([disabled])')
+    const target = checked ?? itemRefs.current.find(item => item !== null && !item.disabled)
+    // Rows a selection in flight disabled cannot take the keyboard; the
+    // trigger does, so the card's keys still reach the menu.
+    ;(target ?? triggerRef.current)?.focus()
+  }, [open, pane, menuPos])
 
   // Portaled placement (the Menu primitive's portal rules: fixed from the
   // anchor rect, measured before paint, clamped inside the viewport): above
@@ -208,26 +246,32 @@ export function ModelSelect(
   const show = (): void => {
     activeTriggerRef.current = triggerRef.current
     setQuery('')
-    setPane('root')
+    // Opening lands on the family pane with the search field focused, so the
+    // seat is typeable the moment it appears.
+    paneFocus.current = 'move'
+    setPane('family')
     setOpen(true)
     reload()
   }
 
   const close = (restoreFocus = false): void => {
     setOpen(false)
-    setPane('root')
+    setPane('family')
+    setQuery('')
     if (restoreFocus) queueMicrotask(() => { (activeTriggerRef.current ?? triggerRef.current)?.focus() })
   }
 
   const drill = (next: Pane): void => {
-    paneFocus.current = 'drill'
+    paneFocus.current = 'move'
     setPane(next)
   }
 
-  /** Leave a drilled pane for the root one, handing the keyboard back to its cell. */
-  const back = (from: Exclude<Pane, 'root'>): void => {
-    paneFocus.current = from
-    setPane('root')
+  /** Step out of a pane, or close when it has no parent. */
+  const back = (from: Pane): void => {
+    const parent = PARENT_PANE[from]
+    if (parent === null) { close(true); return }
+    paneFocus.current = 'move'
+    setPane(parent)
   }
 
   const moveFocus = (offset: number): void => {
@@ -247,9 +291,8 @@ export function ModelSelect(
     if (event.nativeEvent.isComposing) return
     if (event.key === 'Escape' && open) {
       event.preventDefault()
-      // Escape backs out of a drilled pane first, then closes.
-      if (pane !== 'root') back(pane)
-      else close(true)
+      // Escape backs out one pane at a time, then closes.
+      back(pane)
       return
     }
     if (!open) return
@@ -259,8 +302,7 @@ export function ModelSelect(
     if (event.key === 'Tab') {
       if (event.shiftKey) {
         event.preventDefault()
-        if (pane !== 'root') back(pane)
-        else close(true)
+        back(pane)
         return
       }
       // Settling activates the row the keyboard is on; with focus still on the
@@ -287,11 +329,28 @@ export function ModelSelect(
     }
   }
 
+  const inCard = (node: Node | null): boolean => {
+    if (node === null) return false
+    if (rootRef.current?.contains(node) === true) return true
+    // React attaches child refs before their parent's, so the opening pane's
+    // own focus move — the search field's autoFocus — can land BEFORE this
+    // card's ref exists. An absent ref on an open card means "still mounting",
+    // not "outside": reading it as outside closed the menu on every open.
+    return menuRef.current === null ? open : menuRef.current.contains(node)
+  }
+
   const onBlur = (event: FocusEvent<HTMLDivElement>): void => {
-    if (event.relatedTarget instanceof Node && (
-      rootRef.current?.contains(event.relatedTarget) === true
-      || menuRef.current?.contains(event.relatedTarget) === true
-    )) return
+    if (event.relatedTarget instanceof Node && inCard(event.relatedTarget)) return
+    // A programmatic focus() — which is how a pane hands the keyboard to its
+    // search field — reports no relatedTarget in some engines, so where focus
+    // actually landed decides. Judged after the move settles; an outside click
+    // is closed by the mousedown listener regardless.
+    if (event.relatedTarget === null) {
+      queueMicrotask(() => {
+        if (!inCard(document.activeElement)) close()
+      })
+      return
+    }
     close()
   }
 
@@ -369,6 +428,101 @@ export function ModelSelect(
     return (node: HTMLButtonElement | null) => { itemRefs.current[at] = node }
   }
 
+  /** The channel this model is currently running on, if any. */
+  const activeChannelOf = (model: LogicalModel) => model.channels.find(channel =>
+    state.current?.provider === channel.providerId && state.current.model === channel.modelId)
+
+  /**
+   * Commit a model on the channel already in use, else its primary.
+   * @param model - the logical model to run.
+   */
+  const commitModel = (model: LogicalModel): void => {
+    const target = activeChannelOf(model) ?? model.channels[0]
+    if (target === undefined) return
+    choose({ provider: target.providerId, model: target.modelId })
+  }
+
+  /** The model whose channels the channel pane lists. */
+  const shownModel = shownFamily?.models.find(model => model.name === channelModel)
+
+  /** Catalog load status, shared by the panes that can be looking at a stale list. */
+  const loadFeedback = (
+    <>
+      {state.status === 'loading' && <div className={css.status}>{t('status.loading')}</div>}
+      {state.error !== null && lastActionRef.current === 'load' && (
+        <div className={css.error}>
+          <span>{t('error.action', { message: state.error })}</span>
+          <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
+        </div>
+      )}
+      {state.failures.map(failure => (
+        <div className={css.warning} key={failure.id}>
+          <span>{t('warning.groupLoad', { name: failure.name, message: failure.message })}</span>
+          <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
+        </div>
+      ))}
+    </>
+  )
+
+  /**
+   * One model row: picking it commits the model on the channel already in use,
+   * else its primary. The channel step is a separate control on the right, and
+   * it only exists when there is more than one channel to move between — the
+   * common case costs one click and never mentions channels at all.
+   * @param model - the logical model this row stands for.
+   * @param family - the family it belongs to (the row's key and the channel pane's crumb).
+   * @returns the row.
+   */
+  const modelRow = (model: LogicalModel, family: ModelFamily) => {
+    const primary = model.channels[0]
+    /* v8 ignore next -- foldCatalog only creates a model when a channel served it. */
+    if (primary === undefined) return null
+    const active = activeChannelOf(model)
+    const switchable = model.channels.length > 1
+    return (
+      <div className={css.modelRow} key={`${family.key}/${model.name}`}>
+        <button
+          ref={itemRef()}
+          type="button"
+          role="menuitemradio"
+          aria-checked={active !== undefined}
+          className={clsx(css.option, active !== undefined && css.selected)}
+          title={model.name}
+          disabled={locked || busy}
+          onClick={() => { commitModel(model) }}
+        >
+          <span className={css.optionCopy}>
+            <span className={css.modelName}>{model.name}</span>
+            {/* The channel is named only when it is worth knowing: the row is
+              * the one in use AND another channel could have served it. */}
+            {active !== undefined && switchable && (
+              <span className={css.channelHint}>{active.label}</span>
+            )}
+          </span>
+          <span className={css.check}>{active !== undefined ? <IconCheckOutline16 /> : null}</span>
+        </button>
+        {switchable && (
+          <button
+            ref={itemRef()}
+            type="button"
+            role="menuitem"
+            className={css.channelStep}
+            aria-label={t('menu.changeChannel', { model: model.name })}
+            title={t('menu.changeChannel', { model: model.name })}
+            disabled={locked || busy}
+            onClick={() => {
+              setFamilyKey(family.key)
+              setChannelModel(model.name)
+              drill('channel')
+            }}
+          >
+            <IconChevronRightOutline14 />
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onRootKeyDown} onBlur={onBlur}>
       <button
@@ -405,7 +559,7 @@ export function ModelSelect(
         onClick={() => {
           if (open && pane === 'effort') { close(); return }
           activeTriggerRef.current = effortTriggerRef.current
-          paneFocus.current = 'drill'
+          paneFocus.current = 'move'
           setPane('effort')
           setOpen(true)
           reload()
@@ -427,19 +581,43 @@ export function ModelSelect(
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
         >
-          {pane === 'root' && (
+          {pane === 'family' && (
             <>
-              <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { drill('model') }}>
-                <span className={css.cellLabel}>{t('menu.model')}</span>
-                <span className={css.cellValue}>{modelLabel}</span>
-                <IconChevronRightOutline14 className={css.cellChevron} />
-              </button>
-              {reasoning !== undefined && (
-                <button ref={itemRef()} type="button" role="menuitem" className={css.cell} onClick={() => { drill('effort') }}>
-                  <span className={css.cellLabel}>{t('menu.effort')}</span>
-                  <span className={css.cellValue}>{effortLabel}</span>
-                  <IconChevronRightOutline14 className={css.cellChevron} />
-                </button>
+              <input ref={searchRef} className={css.search} autoFocus
+                aria-label={t('search.models')} placeholder={t('search.models')}
+                value={query}
+                onKeyDown={(event) => {
+                  // Enter settles the first hit, so a known name is typed and
+                  // committed without ever leaving the keyboard. IME
+                  // confirmation is not a submission.
+                  if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+                  const first = hits[0]
+                  if (first === undefined) return
+                  event.preventDefault()
+                  commitModel(first.model)
+                }}
+                onChange={(event) => { setQuery(event.target.value) }} />
+              {loadFeedback}
+              <div className={clsx(css.groups, 'scrollable')}>
+                {/* Typing skips the family step: the query lists models
+                  * directly, so a name the operator already knows costs one
+                  * field and one Enter. An empty query lists the families. */}
+                {query.trim() === ''
+                  ? families.map(family => (
+                    <button ref={itemRef()} type="button" role="menuitem" className={css.cell}
+                      key={family.key} disabled={locked || busy}
+                      onClick={() => { setFamilyKey(family.key); drill('model') }}>
+                      <span className={css.cellLabel}>{family.label}</span>
+                      <span className={css.cellValue}>
+                        {t('family.count', { count: String(family.models.length) })}
+                      </span>
+                      <IconChevronRightOutline14 className={css.cellChevron} />
+                    </button>
+                  ))
+                  : hits.map(hit => modelRow(hit.model, hit.family))}
+              </div>
+              {state.status === 'ready' && families.length === 0 && (
+                <div className={css.empty}>{t('empty.models')}</div>
               )}
               {state.current !== null && (
                 <button ref={itemRef()} type="button" role="menuitem" className={css.cell}
@@ -450,64 +628,52 @@ export function ModelSelect(
             </>
           )}
 
-          {pane === 'model' && (
+          {pane === 'model' && shownFamily !== undefined && (
             <>
-              <input ref={searchRef} className={css.search} autoFocus
-                aria-label={t('search.models')} placeholder={t('search.models')}
-                value={query} onChange={(event) => { setQuery(event.target.value) }} />
-              {state.status === 'loading' && (
-                <div className={css.status}>{t('status.loading')}</div>
-              )}
-              {state.error !== null && lastActionRef.current === 'load' && (
-                <div className={css.error}>
-                  <span>{t('error.action', { message: state.error })}</span>
-                  <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
-                </div>
-              )}
-              {state.failures.map(failure => (
-                <div className={css.warning} key={failure.id}>
-                  <span>{t('warning.groupLoad', { name: failure.name, message: failure.message })}</span>
-                  <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
-                </div>
-              ))}
+              <button ref={itemRef()} type="button" role="menuitem" className={css.cell}
+                onClick={() => { back('model') }}>
+                <span className={css.cellLabel}>{t('menu.backToFamilies')}</span>
+              </button>
+              {loadFeedback}
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map(group => ({ ...group, models: group.models.filter(model =>
-                  `${group.name} ${model.name} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) }))
-                  .filter(group => group.models.length > 0).map((group) => {
-                    const headingId = `${id}-${group.id}`
-                    return (
-                      <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
-                        <div className={css.groupTitle} id={headingId}>{group.name}</div>
-                        {group.models.map((model) => {
-                          const selected = state.current?.provider === group.id && state.current.model === model.id
-                          return (
-                            <button
-                              ref={itemRef()}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={selected}
-                              className={clsx(css.option, selected && css.selected)}
-                              key={model.id}
-                              title={model.name}
-                              disabled={locked || busy}
-                              onClick={() => { choose({ provider: group.id, model: model.id }) }}
-                            >
-                              <span className={css.optionCopy}>
-                                <span className={css.modelName}>{model.name}</span>
-                              </span>
-                              <span className={css.check}>
-                                {selected ? <IconCheckOutline16 /> : null}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </section>
-                    )
-                  })}
+                {shownFamily.models.map(model => modelRow(model, shownFamily))}
               </div>
-              {state.status === 'ready' && choices.length === 0 && (
-                <div className={css.empty}>{t('empty.models')}</div>
-              )}
+            </>
+          )}
+
+          {pane === 'channel' && shownModel !== undefined && (
+            <>
+              <button ref={itemRef()} type="button" role="menuitem" className={css.cell}
+                onClick={() => { back('channel') }}>
+                <span className={css.cellLabel}>
+                  {t('menu.backToFamily', { family: shownFamily?.label ?? '' })}
+                </span>
+              </button>
+              <div className={css.groupTitle}>{t('menu.changeChannel', { model: shownModel.name })}</div>
+              {shownModel.channels.map((channel) => {
+                const selected = state.current?.provider === channel.providerId
+                  && state.current.model === channel.modelId
+                return (
+                  <button
+                    ref={itemRef()}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected}
+                    className={clsx(css.option, selected && css.selected)}
+                    key={channel.providerId}
+                    disabled={locked || busy}
+                    onClick={() => { choose({ provider: channel.providerId, model: channel.modelId }) }}
+                  >
+                    <span className={css.optionCopy}>
+                      <span className={css.modelName}>{channel.label}</span>
+                      {channel.fallback && <span className={css.channelTag}>{t('channel.fallback')}</span>}
+                    </span>
+                    <span className={css.check}>
+                      {selected ? <IconCheckOutline16 /> : null}
+                    </span>
+                  </button>
+                )
+              })}
             </>
           )}
 

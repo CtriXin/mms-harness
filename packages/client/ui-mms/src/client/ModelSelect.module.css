@@ -313,3 +313,74 @@
   outline-offset: -2px;
   font: inherit;
 }
+
+/* A model and its channel step share one row: the model button takes the
+ * width, the step sits at its right edge. Two sibling buttons rather than a
+ * nested one, so each is reachable on its own by keyboard. */
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 100%;
+}
+
+.modelRow > .option {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The channel step stays quiet until the row is worked with: it is the
+ * exception, not the path. */
+.channelStep {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  align-self: stretch;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.modelRow:hover .channelStep,
+.modelRow:focus-within .channelStep,
+.channelStep:focus-visible {
+  opacity: 1;
+}
+
+.channelStep:hover:not(:disabled),
+.channelStep:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.channelStep:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+/* Which channel the model in use is riding, under its name. */
+.channelHint {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "备用" beside a non-primary channel in the channel pane. */
+.channelTag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}

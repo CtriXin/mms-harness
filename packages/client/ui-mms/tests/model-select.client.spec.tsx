@@ -77,8 +77,9 @@ describe('ModelSelect reasoning effort', () => {
     const trigger = screen.getByRole('button', {
       name: '选择模型，当前 DeepSeek-V4-Flash，推理等级 High',
     })
-    fireEvent.click(trigger)
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    // Effort has its own trigger: the levels are one click away, with no
+    // "Model / Effort" menu in between.
+    fireEvent.click(screen.getByRole('button', { name: '选择推理等级，当前 High' }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
       .toEqual(['Off', 'High', 'Max'])
     expect(screen.queryByText('Largest budget')).toBeNull()
@@ -117,10 +118,7 @@ describe('ModelSelect reasoning effort', () => {
       t={t}
     />)
 
-    fireEvent.click(screen.getByRole('button', {
-      name: '选择模型，当前 Model，推理等级 Default',
-    }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('button', { name: '选择推理等级，当前 Default' }))
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
       .toEqual(['Default', 'Standard'])
   })
@@ -143,8 +141,9 @@ describe('ModelSelect reasoning effort', () => {
     const trigger = screen.getByRole('button', { name: '选择模型，当前 deepseek-official/removed-model' })
     expect(trigger.textContent).toContain('deepseek-official/removed-model')
     fireEvent.click(trigger)
-    expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    // No reasoning metadata for a model the catalog dropped: no effort trigger.
+    expect(screen.queryByRole('button', { name: /选择推理等级/ })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: /DeepSeek/ }))
     expect(screen.queryByRole('menuitemradio', { name: 'removed-model' })).toBeNull()
     expect(screen.getByRole('menuitemradio', { name: 'DeepSeek-V4-Flash' })).toBeTruthy()
     expect(screen.queryByText('Fast catalog description')).toBeNull()
@@ -206,7 +205,7 @@ describe('ModelSelect reasoning effort', () => {
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /^选择模型/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^DeepSeek/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
     const toast = await screen.findByRole('alert')
     expect(toast.textContent).toBe(sessionInUse
@@ -289,13 +288,12 @@ describe('ModelSelect keyboard walk', () => {
 
   it('↑↓ walk the rows of the shown pane, wrapping, and stay open', () => {
     mountOpen()
-    // The trigger holds focus while the menu opens: the first forward step
-    // enters at the first cell instead of skipping it. false = preventDefault ran.
+    // The family pane's rows: the one family, then MMS's default action.
     const cells = screen.getAllByRole('menuitem')
     expect(fireEvent.keyDown(cells[0]!, { key: 'ArrowDown' })).toBe(false)
     expect(document.activeElement).toBe(cells[0])
 
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('button', { name: '选择推理等级，当前 High' }))
     const rows = screen.getAllByRole('menuitemradio')
     expect(rows.map(row => row.textContent)).toEqual(['Off', 'High', 'Max'])
     // The pane opens on its checked row, so walking starts from High.
@@ -310,7 +308,7 @@ describe('ModelSelect keyboard walk', () => {
 
   it('Tab settles the focused row like Enter and closes the menu', async () => {
     const select = mountOpen()
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('button', { name: '选择推理等级，当前 High' }))
     const rows = screen.getAllByRole('menuitemradio')
     fireEvent.keyDown(rows[1]!, { key: 'ArrowDown' }) // High → Max
     expect(fireEvent.keyDown(rows[2]!, { key: 'Tab' })).toBe(false)
@@ -320,20 +318,37 @@ describe('ModelSelect keyboard walk', () => {
     await waitFor(() => { expect(screen.queryByRole('menu')).toBeNull() })
   })
 
-  it('Shift+Tab leaves a drilled pane and then closes, like Escape', () => {
+  it('Shift+Tab steps out one pane at a time, then closes, like Escape', () => {
     mountOpen()
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^DeepSeek/ }))
     const rows = screen.getAllByRole('menuitemradio')
     expect(fireEvent.keyDown(rows[0]!, { key: 'Tab', shiftKey: true })).toBe(false)
-    // Back on the drilled cell, then closed on the second press.
+    // Back on the family pane, then closed on the second press.
     const cells = screen.getAllByRole('menuitem')
-    expect(document.activeElement).toBe(cells[1])
     expect(screen.getByRole('menu')).toBeTruthy()
-    fireEvent.keyDown(cells[1]!, { key: 'Tab', shiftKey: true })
+    fireEvent.keyDown(cells[0]!, { key: 'Tab', shiftKey: true })
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('Tab with the keyboard still on the trigger enters the menu at the value in use', () => {
+  it('leaving the effort pane closes, rather than dropping into a model list', async () => {
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={createSnapshotStore(state())}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
+      makeDefault={noDefault}
+      t={t}
+    />)
+    const effortTrigger = screen.getByRole('button', { name: '选择推理等级，当前 High' })
+    fireEvent.click(effortTrigger)
+    fireEvent.keyDown(screen.getAllByRole('menuitemradio')[0]!, { key: 'Escape' })
+    // The operator asked for effort, not for models: Escape returns the way in.
+    expect(screen.queryByRole('menu')).toBeNull()
+    await waitFor(() => { expect(document.activeElement).toBe(effortTrigger) })
+  })
+
+  it('opening hands the keyboard straight to the search field, with the card still open', () => {
     render(<ModelSelect
       locked={false}
       available
@@ -344,21 +359,23 @@ describe('ModelSelect keyboard walk', () => {
       t={t}
     />)
     const trigger = screen.getByRole('button', { name: /选择模型/ })
-    // A real click focuses the trigger first; jsdom's does not.
+    // A real click focuses the trigger first; jsdom's does not. The pane then
+    // moves focus into the card, and that move must not be read as leaving it.
     trigger.focus()
     fireEvent.click(trigger)
-    expect(fireEvent.keyDown(trigger, { key: 'Tab' })).toBe(false)
-    // The root pane's first cell carries the current selection.
-    const cells = screen.getAllByRole('menuitem')
-    expect(document.activeElement).toBe(cells[0])
     expect(screen.getByRole('menu')).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '搜索模型或通道' }))
+    // Nothing to Tab into: the keyboard is already where typing works, so the
+    // keystroke stays the browser's.
+    expect(fireEvent.keyDown(document.activeElement!, { key: 'Tab' })).toBe(true)
   })
 
   it('a backward step from outside the list enters at the last row, and a closed menu leaves Tab native', () => {
     mountOpen()
-    // MMS adds "设为新会话默认" as the last root row, so the backward step lands there.
-    const [modelRow, , defaultRow] = screen.getAllByRole('menuitem')
-    expect(fireEvent.keyDown(modelRow!, { key: 'ArrowUp' })).toBe(false)
+    // MMS adds "设为新会话默认" as the family pane's last row, so a backward
+    // step from outside the list lands there.
+    const [familyRow, defaultRow] = screen.getAllByRole('menuitem')
+    expect(fireEvent.keyDown(familyRow!, { key: 'ArrowUp' })).toBe(false)
     expect(document.activeElement).toBe(defaultRow)
     const trigger = screen.getByRole('button', { name: /选择模型/ })
     fireEvent.keyDown(trigger, { key: 'Escape' })
@@ -368,7 +385,7 @@ describe('ModelSelect keyboard walk', () => {
 
   it('hands a drilled pane the focus its unmounted cell left behind, on the value in use', () => {
     mountOpen()
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('button', { name: '选择推理等级，当前 High' }))
     const rows = screen.getAllByRole('menuitemradio')
     // The fixture's model defaults to the High effort: the checked row is where
     // the keyboard lands, not the top of the list.
@@ -396,54 +413,45 @@ describe('ModelSelect keyboard walk', () => {
     // A real click focuses the trigger first; jsdom's does not.
     trigger.focus()
     fireEvent.click(trigger)
-    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
-    // Search remains available even when the catalog has no rows.
+    // Search is right there on open, even when the catalog has no rows at all.
     expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '搜索模型或通道' }))
 
     const retry = screen.getByRole('button', { name: '重试' })
     retry.focus()
     // A control that is not a row keeps the browser's traversal.
     expect(fireEvent.keyDown(retry, { key: 'Tab' })).toBe(true)
-    // Escape still backs out of the pane and then closes the card.
+    // The family pane is the outermost one, so Escape closes the card.
     fireEvent.keyDown(retry, { key: 'Escape' })
-    // Back on the root pane, whose only cell remains (no model means no effort row).
-    const cell = screen.getAllByRole('menuitem')[0]!
-    fireEvent.keyDown(cell, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('opens model search and reaches the selected model with ArrowDown', () => {
+  it('opens with the search field focused, and typing reaches models without the family step', () => {
     mountOpen()
-    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
-    const rows = screen.getAllByRole('menuitemradio')
-    expect(rows[0]!.getAttribute('aria-checked')).toBe('true')
     const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
+    // Open, type, Enter: the family step is for browsing, not for people who
+    // already know the name.
     expect(document.activeElement).toBe(search)
+    fireEvent.change(search, { target: { value: 'flash' } })
+    const rows = screen.getAllByRole('menuitemradio')
+    expect(rows.map(row => row.textContent)).toEqual(['DeepSeek-V4-Flash'])
+    expect(rows[0]!.getAttribute('aria-checked')).toBe('true')
     fireEvent.keyDown(search, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(rows[0])
   })
 
-  it('Escape returns to the root pane with the keyboard on the cell that drilled in', () => {
+  it('Escape walks back one pane at a time, then closes', () => {
     mountOpen()
-    fireEvent.click(screen.getByRole('menuitem', { name: /推理等级/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^DeepSeek/ }))
     const rows = screen.getAllByRole('menuitemradio')
+    expect(rows.map(row => row.textContent)).toEqual(['DeepSeek-V4-Flash'])
     fireEvent.keyDown(rows[0]!, { key: 'Escape' })
-    // The root pane is back with its two cells.
+    // Back on the family pane, which is where the keyboard can keep working.
     const cells = screen.getAllByRole('menuitem')
-    // Back on the drilled cell, so the next keystroke still reaches the menu.
-    expect(document.activeElement).toBe(cells[1])
     expect(screen.getByRole('menu')).toBeTruthy()
+    expect(cells[0]!.textContent).toContain('DeepSeek')
     // A second Escape closes back to the trigger.
-    fireEvent.keyDown(cells[1]!, { key: 'Escape' })
+    fireEvent.keyDown(cells[0]!, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
-  })
-
-  it('Escape from the model list lands back on the model cell', () => {
-    mountOpen()
-    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
-    fireEvent.keyDown(screen.getAllByRole('menuitemradio')[0]!, { key: 'Escape' })
-    const cells = screen.getAllByRole('menuitem')
-    expect(document.activeElement).toBe(cells[0])
   })
 
   it('search reaches the first model when the current model is absent', () => {
@@ -458,11 +466,11 @@ describe('ModelSelect keyboard walk', () => {
       t={t}
     />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
-    const rows = screen.getAllByRole('menuitemradio')
-    expect(rows.every(row => row.getAttribute('aria-checked') === 'false')).toBe(true)
     const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
     expect(document.activeElement).toBe(search)
+    fireEvent.change(search, { target: { value: 'deepseek' } })
+    const rows = screen.getAllByRole('menuitemradio')
+    expect(rows.every(row => row.getAttribute('aria-checked') === 'false')).toBe(true)
     fireEvent.keyDown(search, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(rows[0])
   })
@@ -548,7 +556,6 @@ describe('MMS quick access', () => {
     const select = vi.fn(async () => ({ ok: false as const, error: new RemoteError('gateway/internal', 'offline', {}) }))
     render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
     expect(document.activeElement).toBe(search)
     fireEvent.change(search, { target: { value: '东京' } })
@@ -571,5 +578,158 @@ describe('MMS quick access', () => {
     />)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /选择推理等级/ }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /选择模型，当前/ }).disabled).toBe(true)
+  })
+})
+
+describe('MMS family / model / channel walk', () => {
+  /** One model served by three MMS routes, the way the catalog delivers them. */
+  const threeChannels: ModelDirectoryState['groups'] = [
+    {
+      id: 'route-tokyo',
+      name: 'MiniMax-M3 · newapi-tokyo',
+      models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3', reasoning: { efforts: [{ id: 'max', name: 'Max' }] } }],
+    },
+    {
+      id: 'route-company',
+      name: 'MiniMax-M3 · newapi-company · 备用',
+      // This route declares no reasoning at all: the effort control must vanish
+      // with it rather than keep offering a level the route cannot serve.
+      models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }],
+    },
+    {
+      id: 'route-tokyo-27',
+      name: 'MiniMax-M2.7 · newapi-tokyo',
+      models: [{ id: 'MiniMax-M2.7', name: 'MiniMax-M2.7' }],
+    },
+  ]
+
+  function mount(current: ModelSelection) {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups: threeChannels, current }))
+    const select = vi.fn(async (selection: ModelSelection) => {
+      directory.set(state({ groups: threeChannels, current: selection }))
+      return { ok: true as const, value: undefined }
+    })
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
+    return select
+  }
+
+  it('lists one row per model, not one per route', () => {
+    mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    // The family step first: three catalog rows, one family.
+    const families = screen.getAllByRole('menuitem').filter(row => row.textContent?.includes('MiniMax'))
+    expect(families).toHaveLength(1)
+    expect(families[0]!.textContent).toContain('2 个模型')
+
+    fireEvent.click(families[0]!)
+    // Two models, each once — the channel repetition is gone.
+    expect(screen.getAllByRole('menuitemradio').map(row => row.textContent?.replace(/\s+/g, ' ')))
+      .toEqual([expect.stringContaining('MiniMax-M3'), expect.stringContaining('MiniMax-M2.7')])
+  })
+
+  it('picking a model uses its primary channel, without asking which', async () => {
+    const select = mount({ provider: 'route-tokyo-27', model: 'MiniMax-M2.7' })
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /MiniMax-M3/ }))
+    // The primary route, not the fallback, and no channel step in between.
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    })
+  })
+
+  it('names the channel in use only when another one could serve the model', () => {
+    mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
+    const [m3, m27] = screen.getAllByRole('menuitemradio')
+    expect(m3!.textContent).toContain('newapi-tokyo')
+    // M2.7 has a single channel: naming it would be noise.
+    expect(m27!.textContent).not.toContain('newapi')
+  })
+
+  it('changes the channel from the model row, and marks the fallbacks', async () => {
+    const select = mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '换通道：MiniMax-M3' }))
+    const channels = screen.getAllByRole('menuitemradio')
+    expect(channels.map(row => row.textContent?.replace(/\s+/g, ' ')))
+      .toEqual(['newapi-tokyo', 'newapi-company备用'])
+    expect(channels[0]!.getAttribute('aria-checked')).toBe('true')
+
+    fireEvent.click(channels[1]!)
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({ provider: 'route-company', model: 'MiniMax-M3' })
+    })
+  })
+
+  it('offers no channel step for a model with a single channel', () => {
+    mount({ provider: 'route-tokyo-27', model: 'MiniMax-M2.7' })
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
+    expect(screen.queryByRole('menuitem', { name: '换通道：MiniMax-M2.7' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '换通道：MiniMax-M3' })).toBeTruthy()
+  })
+
+  it('offers the effort levels the CHOSEN channel actually declares', async () => {
+    const select = mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    // The Tokyo route declares Max, and nothing else.
+    fireEvent.click(screen.getByRole('button', { name: /选择推理等级/ }))
+    expect(screen.getAllByRole('menuitemradio').map(row => row.textContent)).toEqual(['Default', 'Max'])
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    // Move to the fallback route, which declares no reasoning at all.
+    fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '换通道：MiniMax-M3' }))
+    fireEvent.click(screen.getAllByRole('menuitemradio')[1]!)
+    await waitFor(() => { expect(select).toHaveBeenCalled() })
+    // No effort control at all, rather than a level this route cannot serve.
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /选择推理等级/ })).toBeNull()
+    })
+  })
+})
+
+describe('MMS type-and-go', () => {
+  it('Enter in the search field commits the first hit on its primary channel', async () => {
+    const groups: ModelDirectoryState['groups'] = [
+      { id: 'route-tokyo', name: 'MiniMax-M3 · newapi-tokyo', models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }] },
+      { id: 'route-company', name: 'MiniMax-M3 · newapi-company · 备用', models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }] },
+    ]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups, current: null }))
+    const select = vi.fn(async (selection: ModelSelection) => {
+      directory.set(state({ groups, current: selection }))
+      return { ok: true as const, value: undefined }
+    })
+    render(<ModelSelect locked={false} available directory={directory}
+      load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
+    fireEvent.change(search, { target: { value: 'm3' } })
+    // One field, one Enter — no family step, no channel step, no mouse.
+    expect(fireEvent.keyDown(search, { key: 'Enter' })).toBe(false)
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    })
+  })
+
+  it('an IME confirmation in the search field is not a submission', () => {
+    const groups: ModelDirectoryState['groups'] = [
+      { id: 'r', name: '模型甲 · 东京', models: [{ id: 'jia', name: '模型甲' }] },
+    ]
+    const select = vi.fn()
+    render(<ModelSelect locked={false} available
+      directory={createSnapshotStore<ModelDirectoryState>(state({ groups, current: null }))}
+      load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
+    const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
+    fireEvent.change(search, { target: { value: '东京' } })
+    fireEvent.keyDown(search, { key: 'Enter', isComposing: true })
+    expect(select).not.toHaveBeenCalled()
   })
 })
