@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
   "files": [
+    "src/catalog.ts",
     "src/index.ts",
     "src/projects.ts",
     "src/remote-access.ts",

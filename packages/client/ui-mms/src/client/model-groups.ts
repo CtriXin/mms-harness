@@ -1,11 +1,10 @@
 /**
  * Reshape the Host's model catalog for the composer's seat.
  *
- * MMS gives dsh one provider per approved route, so a model reachable through
- * three channels arrives as three provider groups that each hold a single
- * model: the flat list then shows `MiniMax-M2.7` three times, once under each
- * channel heading. The operator does not pick a route, they pick a MODEL —
- * and only sometimes care which channel carries it.
+ * MMS gives dsh one provider per wire face — an endpoint, a protocol, a key
+ * and one default reasoning level — so a model reachable through three
+ * channels appears in three of them. The operator does not pick a face, they
+ * pick a MODEL, and only sometimes care which channel carries it.
  *
  * So this module folds the catalog back into family -> model -> channel, and
  * the seat walks it in that order: pick MiniMax, pick M3, done, on the primary
@@ -17,11 +16,9 @@
  */
 
 import type { ModelCatalogModel, ModelProviderGroup } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { RouteRank } from '@deepseek-ai/dsh-client-ui-mms/types'
 
-/** Suffix MMS appends to a non-primary route's display name. */
-const FALLBACK_SUFFIX = ' · 备用'
-
-/** Separator between the model name and the channel in a route's display name. */
+/** Separator between the channel and whatever disambiguates its faces. */
 const LABEL_SEPARATOR = ' · '
 
 /** One route serving a model: the wire identity plus how to describe it. */
@@ -32,8 +29,8 @@ export interface Channel {
   modelId: string
   /** Channel name alone, e.g. `newapi-tokyo`. */
   label: string
-  /** MMS ranked this route behind the model's primary channel. */
-  fallback: boolean
+  /** MMS's ranking of this channel for this model; 0 is its primary. */
+  rank: number
   /** The Host's per-route model facts, including its real reasoning efforts. */
   model: ModelCatalogModel
 }
@@ -75,23 +72,18 @@ export function familyLabelOf(modelName: string): string {
 }
 
 /**
- * Split a route's display name into the channel part and its rank.
+ * The channel a face belongs to.
  *
- * MMS builds it as `<model> · <channel>[ · 备用]`. A group whose name does not
- * start with the model name is not an MMS route (an upstream provider, say),
- * so its whole name is the channel and it has no fallback rank.
+ * MMS names a face after its channel, and appends what tells that channel's
+ * faces apart only when it has more than one (`newapi-tokyo · openai-responses
+ * · max`). Inside one model's channel list those suffixes are noise — a model
+ * reaches a channel through exactly one face — so only the channel is kept.
  * @param groupName - the provider group's display name.
- * @param modelName - the model's own name.
- * @returns the channel label and whether MMS ranked it as a fallback.
+ * @returns the channel label.
  */
-export function channelOf(groupName: string, modelName: string): { label: string; fallback: boolean } {
-  const prefix = `${modelName}${LABEL_SEPARATOR}`
-  const withoutModel = groupName.startsWith(prefix) ? groupName.slice(prefix.length) : groupName
-  const fallback = withoutModel.endsWith(FALLBACK_SUFFIX)
-  return {
-    label: fallback ? withoutModel.slice(0, -FALLBACK_SUFFIX.length) : withoutModel,
-    fallback,
-  }
+export function channelOf(groupName: string): string {
+  const head = groupName.split(LABEL_SEPARATOR)[0] ?? groupName
+  return head === '' ? groupName : head
 }
 
 /**
@@ -103,7 +95,11 @@ export function channelOf(groupName: string, modelName: string): { label: string
  * @param groups - the catalog's provider groups.
  * @returns families, each holding its models, each holding its channels.
  */
-export function foldCatalog(groups: readonly ModelProviderGroup[]): ModelFamily[] {
+export function foldCatalog(
+  groups: readonly ModelProviderGroup[], ranks: readonly RouteRank[] = [],
+): ModelFamily[] {
+  // `${model}\0${provider}` is how MMS identifies an approved route.
+  const rankOf = new Map(ranks.map(row => [`${row.model}\u0000${row.provider}`, row.rank]))
   const families = new Map<string, ModelFamily>()
   const models = new Map<string, LogicalModel>()
   for (const group of groups) {
@@ -121,15 +117,17 @@ export function foldCatalog(groups: readonly ModelProviderGroup[]): ModelFamily[
         models.set(modelKey, logical)
         family.models.push(logical)
       }
-      const { label, fallback } = channelOf(group.name, model.name)
-      logical.channels.push({ providerId: group.id, modelId: model.id, label, fallback, model })
+      // Unranked means MMS never approved this pair — an upstream provider,
+      // say — and an unknown rank must not outrank an approved primary.
+      const rank = rankOf.get(`${model.name}\u0000${group.id}`) ?? Number.MAX_SAFE_INTEGER
+      logical.channels.push({ providerId: group.id, modelId: model.id, label: channelOf(group.name), rank, model })
     }
   }
   for (const logical of models.values()) {
-    // Stable: a primary leads, and equal ranks keep catalog order.
+    // Stable: MMS's own ranking leads, and equal ranks keep catalog order.
     logical.channels = logical.channels
       .map((channel, index) => ({ channel, index }))
-      .sort((a, b) => Number(a.channel.fallback) - Number(b.channel.fallback) || a.index - b.index)
+      .sort((a, b) => a.channel.rank - b.channel.rank || a.index - b.index)
       .map(entry => entry.channel)
   }
   return [...families.values()]

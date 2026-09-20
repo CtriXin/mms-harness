@@ -72,7 +72,7 @@ def convert_bundle(bundle):
     p = bundle['payloads']
     # Bundle readiness aggregates all leaves; reject unavailable leaves below,
     # while preserving the diagnostic for the user instead of inventing secrets.
-    providers, credentials, routes, excluded = {}, {}, [], []
+    providers, credentials, routes, excluded, faces = {}, {}, [], [], {}
     builtin_path = REPO / 'config/provider-profiles.json'
     builtin_bytes = builtin_path.read_bytes() if builtin_path.exists() else b'{}'
     builtin_profiles = json.loads(builtin_bytes)
@@ -100,9 +100,20 @@ def convert_bundle(bundle):
                 protocol, endpoint, fallback_reason = protocol_for(logical, route)
                 # One explicit route per logical model and source: no ambiguous
                 # same-wire-id overwrite, no native pi-ai provider fallback.
-                digest = hashlib.sha256(f'{logical}\0{provider}\0{rank}'.encode()).hexdigest()[:12]
-                route_id = 'mms-' + digest
-                reference = 'MMS_DSH_' + digest.upper()
+                # One dsh provider per WIRE FACE, not per route: a face is an
+                # endpoint, a protocol, a key and one default reasoning level,
+                # and every model reachable through it belongs in its `models`.
+                # Splitting by route instead put the same key and endpoint into
+                # sixty-eight entries that differed only by which single model
+                # each held — a settings page nobody could work with, and a key
+                # rotation that had to be typed twenty times.
+                #
+                # `reasoning` is where the grouping stops. dsh hangs it on the
+                # PROVIDER (`PiAiProviderConfig.reasoning`), while MMS declares
+                # it per model, and a switch that sends no effort inherits it —
+                # so folding two different defaults together would quietly send
+                # `high` for a model whose approved default is `max`. The key
+                # carries it, and those routes stay separate faces.
                 caps = resolve_model_capabilities(logical, provider_id=provider, base_url=endpoint, protocol=protocol,
                     approved_facts=p['capabilities'], model_policy=p['policy'], provider_profiles=p['profile'])
                 # MMS ships non-secret capability defaults in its versioned profile
@@ -138,14 +149,32 @@ def convert_bundle(bundle):
                     'contextWindow': context, 'maxTokens': caps['max_output_tokens'],
                     'input': ['text', 'image'] if caps.get('supports_vision') else ['text'],
                     'reasoningEfforts': efforts or False}
-                label = f'{logical} · {profile.get("name", provider)}' + (' · 备用' if rank else '')
-                item = {'displayName': label, 'apiKeyEnv': reference, 'api': PROTOCOLS[protocol],
-                    'baseURL': endpoint, 'models': [model], 'retryPolicy': {'mode': 'normal', 'maxRetries': 1}}
-                if protocol == 'openai_chat_completions':
-                    item['compat'] = {'supportsDeveloperRole': False}
-                if preference in efforts and preference != 'off':
-                    item['reasoning'] = preference
-                providers[route_id] = item
+                default_effort = preference if preference in efforts and preference != 'off' else None
+                # See the note above: everything in this key changes what the
+                # wire does, so two routes that agree on all of it are one face.
+                face = (provider, endpoint, protocol, default_effort)
+                digest = hashlib.sha256('\0'.join(str(part) for part in face).encode()).hexdigest()[:12]
+                route_id = 'mms-' + digest
+                reference = 'MMS_DSH_' + digest.upper()
+                item = providers.get(route_id)
+                if item is None:
+                    item = {'displayName': profile.get('name', provider), 'apiKeyEnv': reference,
+                        'api': PROTOCOLS[protocol], 'baseURL': endpoint, 'models': [],
+                        'retryPolicy': {'mode': 'normal', 'maxRetries': 1}}
+                    if protocol == 'openai_chat_completions':
+                        item['compat'] = {'supportsDeveloperRole': False}
+                    if default_effort is not None:
+                        item['reasoning'] = default_effort
+                    providers[route_id] = item
+                    faces[route_id] = face
+                # dsh keys a face's models by wire id; two logical models sharing
+                # one would shadow each other silently, so the second is refused
+                # rather than folded in.
+                if any(existing['id'] == model['id'] for existing in item['models']):
+                    if not any(existing == model for existing in item['models']):
+                        raise ValueError('Two approved models share one wire id on the same face')
+                else:
+                    item['models'].append(model)
                 credentials[reference] = route['api_key']
                 routes.append({'logical_model': logical, 'provider_id': provider, 'provider': route_id,
                     'model': route['model_id'], 'rank': rank, 'protocol': protocol, 'base_url': endpoint,
@@ -155,11 +184,36 @@ def convert_bundle(bundle):
                 excluded.append({'model': logical, 'provider': provider, 'rank': rank, 'reason': str(exc)})
     if not providers:
         raise ConsumerBundleError('No supported credential-bound MMS routes available')
+    name_faces(providers, faces)
     return {'providers': providers, 'credentials': credentials, 'routes': routes, 'excluded': excluded,
             'builtin_capability_sha256': hashlib.sha256(builtin_bytes).hexdigest(),
             'bundle_runtime_ready': p['router'].get('runtime_ready'),
             'bundle_runtime_ready_reason': p['router'].get('runtime_ready_reason', ''),
             'revisions': bundle['component_revisions'], 'route_source': 'mms:latest-approved:' + bundle['component_revisions']['bundle']}
+
+
+def name_faces(providers, faces):
+    """Give every face a name the operator can tell apart, in place.
+
+    A channel usually has one face and is simply named after itself. When it
+    has several — a second protocol, or a second default reasoning level —
+    the name says which, because "newapi-tokyo" three times over is worse than
+    the per-route names this grouping replaced.
+    """
+    by_channel = {}
+    for route_id in providers:
+        by_channel.setdefault(faces[route_id][0], []).append(route_id)
+    for members in by_channel.values():
+        if len(members) == 1:
+            continue
+        protocols = {faces[route_id][2] for route_id in members}
+        efforts = {faces[route_id][3] for route_id in members}
+        for route_id in members:
+            _, _, protocol, effort = faces[route_id]
+            parts = ([PROTOCOLS[protocol]] if len(protocols) > 1 else []) \
+                + ([effort or '无推理'] if len(efforts) > 1 else [])
+            if parts:
+                providers[route_id]['displayName'] += ' · ' + ' · '.join(parts)
 
 
 def read_config(root):
@@ -177,17 +231,29 @@ def private_json(path: Path, value):
     temporary.replace(path)
 
 
-def seed_default_selection(path: Path, selection: dict):
-    """Give dsh the MMS default model and effort, once.
+def seed_default_selection(path: Path, selection: dict, known_providers=()):
+    """Give dsh the MMS default model and effort, and keep it pointing at a real face.
 
     `reasoningEffort` exists only in dsh's settings layer, and the
     agent-default-model config silently ignores it. A selection the user has
-    already saved (or a document this code cannot safely append to) is left
-    untouched.
+    already saved is normally left untouched — but a provider id that no longer
+    exists is not a preference, it is a dangling reference: regrouping the
+    routes into wire faces changed every id, and a default naming a face that
+    is gone leaves new sessions with no model at all. That one is repaired.
+
+    Only the default is ever rewritten. The session transcripts name the
+    provider that actually served each past turn, and rewriting those to say
+    something else would falsify the record.
     """
     text = path.read_text() if path.exists() else ''
-    if re.search(r'^agent-default-model\s*:', text, re.M) or text.lstrip().startswith(('{', '[')):
+    if text.lstrip().startswith(('{', '[')):
         return
+    saved = re.search(r'^agent-default-model\s*:\n((?:[ \t]+.*\n?)*)', text, re.M)
+    if saved is not None:
+        provider = re.search(r'^\s+provider\s*:\s*"?([\w-]+)"?', saved.group(1), re.M)
+        if provider is None or provider.group(1) in set(known_providers):
+            return
+        text = text[:saved.start()] + text[saved.end():]
     block = 'agent-default-model:\n' + ''.join(f'  {k}: {json.dumps(v)}\n' for k, v in selection.items())
     path.write_text(text + ('' if not text or text.endswith('\n') else '\n') + block)
 
@@ -257,7 +323,7 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
     preference = data['providers'][choice['provider']].get('reasoning')
     if preference:
         selection['reasoningEffort'] = preference
-    seed_default_selection(dsh_home / 'settings.yaml', selection)
+    seed_default_selection(dsh_home / 'settings.yaml', selection, data['providers'])
     patch = [
         {'id': 'llm-pi-ai', 'config': {'providers': data['providers']}},
         {'id': 'llm-deepseek', 'disabled': True},

@@ -68,6 +68,7 @@ describe('ModelSelect reasoning effort', () => {
       locked={false}
       available
       directory={directory}
+      ranks={[]}
       load={vi.fn()}
       select={select}
       makeDefault={noDefault}
@@ -112,6 +113,7 @@ describe('ModelSelect reasoning effort', () => {
       locked={false}
       available
       directory={directory}
+      ranks={[]}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
       makeDefault={noDefault}
@@ -132,6 +134,7 @@ describe('ModelSelect reasoning effort', () => {
       locked={false}
       available
       directory={directory}
+      ranks={[]}
       load={vi.fn()}
       select={select}
       makeDefault={noDefault}
@@ -160,6 +163,7 @@ describe('ModelSelect reasoning effort', () => {
       locked={false}
       available
       directory={directory}
+      ranks={[]}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
       makeDefault={noDefault}
@@ -198,6 +202,7 @@ describe('ModelSelect reasoning effort', () => {
       locked={false}
       available
       directory={directory}
+      ranks={[]}
       load={vi.fn()}
       select={select}
       makeDefault={noDefault}
@@ -224,7 +229,7 @@ describe('ModelSelect reasoning effort', () => {
       const { container } = render(<ModelSelect
         locked={false}
         available
-        directory={createSnapshotStore(state())}
+        directory={createSnapshotStore(state())} ranks={[]}
         load={vi.fn()}
         select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
         makeDefault={noDefault}
@@ -258,7 +263,7 @@ describe('ModelSelect reasoning effort', () => {
     render(<ModelSelect
       locked={false}
       available={false}
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={load}
       select={vi.fn().mockResolvedValue(undefined)}
       makeDefault={noDefault}
@@ -276,7 +281,7 @@ describe('ModelSelect keyboard walk', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={vi.fn()}
       select={select}
       makeDefault={noDefault}
@@ -334,7 +339,7 @@ describe('ModelSelect keyboard walk', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
       makeDefault={noDefault}
@@ -352,7 +357,7 @@ describe('ModelSelect keyboard walk', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
       makeDefault={noDefault}
@@ -404,6 +409,7 @@ describe('ModelSelect keyboard walk', () => {
       locked={false}
       available
       directory={directory}
+      ranks={[]}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
       makeDefault={noDefault}
@@ -459,7 +465,7 @@ describe('ModelSelect keyboard walk', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state({ current: { provider: 'gone', model: 'gone' } }))}
+      directory={createSnapshotStore(state({ current: { provider: 'gone', model: 'gone' } }))} ranks={[]}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue({ ok: true, value: undefined })}
       makeDefault={noDefault}
@@ -484,7 +490,7 @@ describe('MMS quick access', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={vi.fn()}
       select={select}
       makeDefault={makeDefault}
@@ -505,7 +511,7 @@ describe('MMS quick access', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={vi.fn()}
       select={vi.fn()}
       makeDefault={makeDefault}
@@ -521,7 +527,7 @@ describe('MMS quick access', () => {
     render(<ModelSelect
       locked={false}
       available
-      directory={createSnapshotStore(state({ current: null }))}
+      directory={createSnapshotStore(state({ current: null }))} ranks={[]}
       load={vi.fn()}
       select={vi.fn()}
       makeDefault={noDefault}
@@ -535,7 +541,8 @@ describe('MMS quick access', () => {
     const directory = createSnapshotStore(state())
     const result = Promise.withResolvers<{ ok: true; value: undefined }>()
     const select = vi.fn(() => result.promise)
-    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
+    render(<ModelSelect locked={false} available directory={directory} ranks={[]}
+      load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
     const trigger = screen.getByRole('button', { name: '选择推理等级，当前 High' })
     fireEvent.click(trigger)
     expect(screen.getAllByRole('menuitemradio').map(row => row.textContent))
@@ -554,7 +561,8 @@ describe('MMS quick access', () => {
       { id: 'backup', name: '备用东京', models: [{ id: 'gpt-test', name: 'GPT test' }] },
     ] }))
     const select = vi.fn(async () => ({ ok: false as const, error: new RemoteError('gateway/internal', 'offline', {}) }))
-    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
+    render(<ModelSelect locked={false} available directory={directory} ranks={[]}
+      load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     const search = screen.getByRole('textbox', { name: '搜索模型或通道' })
     expect(document.activeElement).toBe(search)
@@ -570,7 +578,7 @@ describe('MMS quick access', () => {
     render(<ModelSelect
       locked
       available
-      directory={createSnapshotStore(state())}
+      directory={createSnapshotStore(state())} ranks={[]}
       load={vi.fn()}
       select={vi.fn()}
       makeDefault={noDefault}
@@ -582,25 +590,30 @@ describe('MMS quick access', () => {
 })
 
 describe('MMS family / model / channel walk', () => {
-  /** One model served by three MMS routes, the way the catalog delivers them. */
+  /** Two wire faces, the way the catalog delivers them: a channel holding models. */
   const threeChannels: ModelDirectoryState['groups'] = [
     {
-      id: 'route-tokyo',
-      name: 'MiniMax-M3 · newapi-tokyo',
-      models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3', reasoning: { efforts: [{ id: 'max', name: 'Max' }] } }],
+      id: 'face-tokyo',
+      name: 'newapi-tokyo',
+      models: [
+        { id: 'MiniMax-M3', name: 'MiniMax-M3', reasoning: { efforts: [{ id: 'max', name: 'Max' }] } },
+        { id: 'MiniMax-M2.7', name: 'MiniMax-M2.7' },
+      ],
     },
     {
-      id: 'route-company',
-      name: 'MiniMax-M3 · newapi-company · 备用',
-      // This route declares no reasoning at all: the effort control must vanish
-      // with it rather than keep offering a level the route cannot serve.
+      id: 'face-company',
+      // This face declares no reasoning for the model: the effort control must
+      // vanish with it rather than keep offering a level it cannot serve.
+      name: 'newapi-company',
       models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }],
     },
-    {
-      id: 'route-tokyo-27',
-      name: 'MiniMax-M2.7 · newapi-tokyo',
-      models: [{ id: 'MiniMax-M2.7', name: 'MiniMax-M2.7' }],
-    },
+  ]
+
+  /** MMS's ranking, which now travels as data rather than in the face's name. */
+  const threeRanks = [
+    { model: 'MiniMax-M3', provider: 'face-tokyo', rank: 0 },
+    { model: 'MiniMax-M3', provider: 'face-company', rank: 1 },
+    { model: 'MiniMax-M2.7', provider: 'face-tokyo', rank: 0 },
   ]
 
   function mount(current: ModelSelection) {
@@ -609,13 +622,13 @@ describe('MMS family / model / channel walk', () => {
       directory.set(state({ groups: threeChannels, current: selection }))
       return { ok: true as const, value: undefined }
     })
-    render(<ModelSelect locked={false} available directory={directory}
+    render(<ModelSelect locked={false} available directory={directory} ranks={threeRanks}
       load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
     return select
   }
 
   it('lists one row per model, not one per route', () => {
-    mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    mount({ provider: 'face-tokyo', model: 'MiniMax-M3' })
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     // The family step first: three catalog rows, one family.
     const families = screen.getAllByRole('menuitem').filter(row => row.textContent?.includes('MiniMax'))
@@ -629,18 +642,18 @@ describe('MMS family / model / channel walk', () => {
   })
 
   it('picking a model uses its primary channel, without asking which', async () => {
-    const select = mount({ provider: 'route-tokyo-27', model: 'MiniMax-M2.7' })
+    const select = mount({ provider: 'face-tokyo', model: 'MiniMax-M2.7' })
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /MiniMax-M3/ }))
     // The primary route, not the fallback, and no channel step in between.
     await waitFor(() => {
-      expect(select).toHaveBeenCalledWith({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+      expect(select).toHaveBeenCalledWith({ provider: 'face-tokyo', model: 'MiniMax-M3' })
     })
   })
 
   it('names the channel in use only when another one could serve the model', () => {
-    mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    mount({ provider: 'face-tokyo', model: 'MiniMax-M3' })
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
     const [m3, m27] = screen.getAllByRole('menuitemradio')
@@ -650,7 +663,7 @@ describe('MMS family / model / channel walk', () => {
   })
 
   it('changes the channel from the model row, and marks the fallbacks', async () => {
-    const select = mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    const select = mount({ provider: 'face-tokyo', model: 'MiniMax-M3' })
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: '换通道：MiniMax-M3' }))
@@ -661,12 +674,12 @@ describe('MMS family / model / channel walk', () => {
 
     fireEvent.click(channels[1]!)
     await waitFor(() => {
-      expect(select).toHaveBeenCalledWith({ provider: 'route-company', model: 'MiniMax-M3' })
+      expect(select).toHaveBeenCalledWith({ provider: 'face-company', model: 'MiniMax-M3' })
     })
   })
 
   it('offers no channel step for a model with a single channel', () => {
-    mount({ provider: 'route-tokyo-27', model: 'MiniMax-M2.7' })
+    mount({ provider: 'face-tokyo', model: 'MiniMax-M2.7' })
     fireEvent.click(screen.getByRole('button', { name: /选择模型，当前/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /MiniMax/ }))
     expect(screen.queryByRole('menuitem', { name: '换通道：MiniMax-M2.7' })).toBeNull()
@@ -674,7 +687,7 @@ describe('MMS family / model / channel walk', () => {
   })
 
   it('offers the effort levels the CHOSEN channel actually declares', async () => {
-    const select = mount({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+    const select = mount({ provider: 'face-tokyo', model: 'MiniMax-M3' })
     // The Tokyo route declares Max, and nothing else.
     fireEvent.click(screen.getByRole('button', { name: /选择推理等级/ }))
     expect(screen.getAllByRole('menuitemradio').map(row => row.textContent)).toEqual(['Default', 'Max'])
@@ -696,15 +709,19 @@ describe('MMS family / model / channel walk', () => {
 describe('MMS type-and-go', () => {
   it('Enter in the search field commits the first hit on its primary channel', async () => {
     const groups: ModelDirectoryState['groups'] = [
-      { id: 'route-tokyo', name: 'MiniMax-M3 · newapi-tokyo', models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }] },
-      { id: 'route-company', name: 'MiniMax-M3 · newapi-company · 备用', models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }] },
+      { id: 'face-company', name: 'newapi-company', models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }] },
+      { id: 'face-tokyo', name: 'newapi-tokyo', models: [{ id: 'MiniMax-M3', name: 'MiniMax-M3' }] },
     ]
+    // The primary is second in catalog order, so committing it proves the rank
+    // came from the ranking rather than from whichever face happened to be first.
+    const ranks = [{ model: 'MiniMax-M3', provider: 'face-tokyo', rank: 0 },
+      { model: 'MiniMax-M3', provider: 'face-company', rank: 1 }]
     const directory = createSnapshotStore<ModelDirectoryState>(state({ groups, current: null }))
     const select = vi.fn(async (selection: ModelSelection) => {
       directory.set(state({ groups, current: selection }))
       return { ok: true as const, value: undefined }
     })
-    render(<ModelSelect locked={false} available directory={directory}
+    render(<ModelSelect locked={false} available directory={directory} ranks={ranks}
       load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
 
     fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))
@@ -713,7 +730,7 @@ describe('MMS type-and-go', () => {
     // One field, one Enter — no family step, no channel step, no mouse.
     expect(fireEvent.keyDown(search, { key: 'Enter' })).toBe(false)
     await waitFor(() => {
-      expect(select).toHaveBeenCalledWith({ provider: 'route-tokyo', model: 'MiniMax-M3' })
+      expect(select).toHaveBeenCalledWith({ provider: 'face-tokyo', model: 'MiniMax-M3' })
     })
   })
 
@@ -723,7 +740,7 @@ describe('MMS type-and-go', () => {
     ]
     const select = vi.fn()
     render(<ModelSelect locked={false} available
-      directory={createSnapshotStore<ModelDirectoryState>(state({ groups, current: null }))}
+      directory={createSnapshotStore<ModelDirectoryState>(state({ groups, current: null }))} ranks={[]}
       load={vi.fn()} select={select} makeDefault={noDefault} t={t} />)
 
     fireEvent.click(screen.getByRole('button', { name: /选择模型/ }))

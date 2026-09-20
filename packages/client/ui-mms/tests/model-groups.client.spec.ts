@@ -6,13 +6,18 @@ import { describe, expect, it } from 'vitest'
 import type { ModelProviderGroup } from '@deepseek-ai/dsh-api-session-controller/types'
 import { channelOf, familyLabelOf, foldCatalog, searchModels } from '../src/client/model-groups.ts'
 
-/** One MMS route as the catalog delivers it: a provider holding a single model. */
-function route(model: string, channel: string, fallback = false): ModelProviderGroup {
+/** One MMS wire face as the catalog delivers it: a channel holding models. */
+function face(channel: string, models: readonly string[], suffix = ''): ModelProviderGroup {
   return {
-    id: `mms-${model}-${channel}`,
-    name: `${model} · ${channel}${fallback ? ' · 备用' : ''}`,
-    models: [{ id: `wire-${model}`, name: model }],
+    id: `mms-${channel}${suffix}`,
+    name: `${channel}${suffix}`,
+    models: models.map(model => ({ id: `wire-${model}`, name: model })),
   }
+}
+
+/** The ranking MMS publishes beside the catalog: 0 is the model's primary. */
+function ranked(rows: readonly [string, string, number][]) {
+  return rows.map(([model, channel, rank]) => ({ model, provider: `mms-${channel}`, rank }))
 }
 
 describe('familyLabelOf', () => {
@@ -32,59 +37,80 @@ describe('familyLabelOf', () => {
 })
 
 describe('channelOf', () => {
-  it('keeps only the channel, and reports the fallback rank', () => {
-    expect(channelOf('MiniMax-M3 · newapi-tokyo', 'MiniMax-M3'))
-      .toEqual({ label: 'newapi-tokyo', fallback: false })
-    expect(channelOf('MiniMax-M3 · newapi-company · 备用', 'MiniMax-M3'))
-      .toEqual({ label: 'newapi-company', fallback: true })
+  it('keeps the channel and drops what only tells its faces apart', () => {
+    // A model reaches a channel through exactly one face, so `· openai-responses
+    // · max` is noise inside that model's own channel list.
+    expect(channelOf('newapi-tokyo')).toBe('newapi-tokyo')
+    expect(channelOf('newapi-tokyo · openai-responses · max')).toBe('newapi-tokyo')
   })
 
   it('leaves a non-MMS provider name alone', () => {
-    expect(channelOf('Some Upstream Provider', 'gpt-5.6'))
-      .toEqual({ label: 'Some Upstream Provider', fallback: false })
+    expect(channelOf('Some Upstream Provider')).toBe('Some Upstream Provider')
   })
 })
 
 describe('foldCatalog', () => {
   const catalog = [
-    route('MiniMax-M2.7', 'newapi-tokyo'),
-    route('MiniMax-M2.7', 'newapi-company', true),
-    route('MiniMax-M2.7', 'newapi-tencent', true),
-    route('MiniMax-M3', 'newapi-tokyo'),
-    route('MiniMax-M3', 'newapi-company', true),
-    route('deepseek-v4-flash', 'newapi-tokyo'),
+    face('newapi-tokyo', ['MiniMax-M2.7', 'MiniMax-M3', 'deepseek-v4-flash']),
+    face('newapi-company', ['MiniMax-M2.7', 'MiniMax-M3']),
+    face('newapi-tencent', ['MiniMax-M2.7']),
   ]
+  const ranks = ranked([
+    ['MiniMax-M2.7', 'newapi-tokyo', 0], ['MiniMax-M2.7', 'newapi-company', 1],
+    ['MiniMax-M2.7', 'newapi-tencent', 2], ['MiniMax-M3', 'newapi-tokyo', 0],
+    ['MiniMax-M3', 'newapi-company', 1], ['deepseek-v4-flash', 'newapi-tokyo', 0],
+  ])
 
-  it('collapses the repeated rows into one row per model', () => {
-    const families = foldCatalog(catalog)
+  it('turns faces holding many models into models holding many channels', () => {
+    const families = foldCatalog(catalog, ranks)
     expect(families.map(family => family.label)).toEqual(['MiniMax', 'deepseek'])
     expect(families[0]!.models.map(model => model.name)).toEqual(['MiniMax-M2.7', 'MiniMax-M3'])
-    // Six catalog rows became two MiniMax rows; the channels moved one level down.
     expect(families[0]!.models[0]!.channels.map(channel => channel.label))
       .toEqual(['newapi-tokyo', 'newapi-company', 'newapi-tencent'])
   })
 
-  it('puts the primary channel first, whatever order the catalog arrives in', () => {
+  it('orders a model\'s channels by the rank MMS published, not by catalog order', () => {
+    // The ranking no longer rides in the display name, so a catalog that lists
+    // the fallbacks first must still put the primary first.
     const families = foldCatalog([
-      route('MiniMax-M3', 'newapi-company', true),
-      route('MiniMax-M3', 'newapi-tencent', true),
-      route('MiniMax-M3', 'newapi-tokyo'),
-    ])
-    const channels = families[0]!.models[0]!.channels
-    expect(channels[0]).toMatchObject({ label: 'newapi-tokyo', fallback: false })
-    // The remaining fallbacks keep catalog order rather than being reshuffled.
-    expect(channels.slice(1).map(channel => channel.label)).toEqual(['newapi-company', 'newapi-tencent'])
+      face('newapi-company', ['MiniMax-M3']),
+      face('newapi-tencent', ['MiniMax-M3']),
+      face('newapi-tokyo', ['MiniMax-M3']),
+    ], ranked([['MiniMax-M3', 'newapi-tokyo', 0], ['MiniMax-M3', 'newapi-company', 1],
+      ['MiniMax-M3', 'newapi-tencent', 2]]))
+    expect(families[0]!.models[0]!.channels.map(channel => [channel.label, channel.rank]))
+      .toEqual([['newapi-tokyo', 0], ['newapi-company', 1], ['newapi-tencent', 2]])
   })
 
-  it('carries each route\'s own wire identity and reasoning facts', () => {
+  it('never lets an unranked channel outrank an approved primary', () => {
+    // An upstream provider MMS never approved has no rank; it must sort last
+    // rather than claim the model's primary channel.
+    const families = foldCatalog([
+      face('Some Upstream Provider', ['MiniMax-M3']),
+      face('newapi-tokyo', ['MiniMax-M3']),
+    ], ranked([['MiniMax-M3', 'newapi-tokyo', 0]]))
+    expect(families[0]!.models[0]!.channels.map(channel => channel.label))
+      .toEqual(['newapi-tokyo', 'Some Upstream Provider'])
+  })
+
+  it('keeps catalog order when the Host cannot say how channels rank', () => {
+    const families = foldCatalog([
+      face('newapi-company', ['MiniMax-M3']),
+      face('newapi-tokyo', ['MiniMax-M3']),
+    ])
+    expect(families[0]!.models[0]!.channels.map(channel => channel.label))
+      .toEqual(['newapi-company', 'newapi-tokyo'])
+  })
+
+  it('carries each face\'s own wire identity and reasoning facts', () => {
     const efforts = { efforts: [{ id: 'max', name: 'Max' }] }
     const families = foldCatalog([
-      { id: 'p-fast', name: 'k3 · relay-a', models: [{ id: 'k3-wire-a', name: 'k3' }] },
-      { id: 'p-slow', name: 'k3 · relay-b · 备用', models: [{ id: 'k3-wire-b', name: 'k3', reasoning: efforts }] },
-    ])
+      { id: 'p-fast', name: 'relay-a', models: [{ id: 'k3-wire-a', name: 'k3' }] },
+      { id: 'p-slow', name: 'relay-b', models: [{ id: 'k3-wire-b', name: 'k3', reasoning: efforts }] },
+    ], [{ model: 'k3', provider: 'p-fast', rank: 0 }, { model: 'k3', provider: 'p-slow', rank: 1 }])
     const channels = families[0]!.models[0]!.channels
     expect(channels[0]).toMatchObject({ providerId: 'p-fast', modelId: 'k3-wire-a' })
-    // Effort levels are per ROUTE: the seat must read them off the chosen channel.
+    // Effort levels are per FACE: the seat must read them off the chosen channel.
     expect(channels[0]!.model.reasoning).toBeUndefined()
     expect(channels[1]!.model.reasoning).toEqual(efforts)
   })
@@ -92,8 +118,8 @@ describe('foldCatalog', () => {
 
 describe('searchModels', () => {
   const families = foldCatalog([
-    route('MiniMax-M3', 'newapi-tokyo'),
-    route('deepseek-v4-flash', 'newapi-osaka'),
+    face('newapi-tokyo', ['MiniMax-M3']),
+    face('newapi-osaka', ['deepseek-v4-flash']),
   ])
 
   it('matches a model by its own name, its family, or a channel that serves it', () => {

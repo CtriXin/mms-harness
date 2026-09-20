@@ -170,10 +170,22 @@ def test_mms_effort_preference_reaches_dsh_settings_once(tmp_path):
     assert 'agent-default-model:' in settings and 'reasoningEffort: "high"' in settings and 'model: "upstream-alias"' in settings
     patch=json.loads((instance/'mms.patch.yml').read_text())
     assert [r['config'] for r in patch if r.get('id')=='agent-default-model']==[{'provider':json.loads((instance/'routes.json').read_text())['routes'][0]['provider'],'model':'upstream-alias'}]
-    user='ui-onboarding:\n  welcomeNoticeVersion: x\nagent-default-model:\n  provider: other\n  model: picked\n  reasoningEffort: low\n'
+    # A saved choice that still resolves is never touched.
+    live=json.loads((instance/'routes.json').read_text())['routes'][0]['provider']
+    user=f'ui-onboarding:\n  welcomeNoticeVersion: x\nagent-default-model:\n  provider: {live}\n  model: picked\n  reasoningEffort: low\n'
     (instance/'home/settings.yaml').write_text(user)
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
     assert (instance/'home/settings.yaml').read_text()==user
+    # One that no longer resolves is a dangling reference, not a preference:
+    # regrouping the routes into wire faces changed every provider id, and a
+    # default naming a face that is gone leaves new sessions with no model.
+    stale=user.replace(live,'mms-000000000000')
+    (instance/'home/settings.yaml').write_text(stale)
+    configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
+    repaired=(instance/'home/settings.yaml').read_text()
+    assert 'mms-000000000000' not in repaired and f'provider: "{live}"' in repaired
+    # Everything else in the document survives the repair.
+    assert 'welcomeNoticeVersion: x' in repaired
     other='ui-onboarding:\n  welcomeNoticeVersion: x\n'
     (instance/'home/settings.yaml').write_text(other)
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
@@ -246,3 +258,79 @@ def test_shared_skill_roots_default_to_the_operators_own_libraries(tmp_path, mon
     assert shared_skill_dirs() == [str(home/'.agents/skills')]
     skill_root(home/'.claude/skills')
     assert shared_skill_dirs() == [str(home/'.claude/skills'), str(home/'.agents/skills')]
+
+
+def many_routes(models, capabilities=None):
+    """A bundle whose router offers several models over several channels.
+
+    `models` maps a logical model to its routes as `(channel, wire id, effort)`
+    triples, primary first.
+    """
+    d = payload()
+    d['payloads']['router']['routes'] = {}
+    d['payloads']['capabilities']['models'] = []
+    for logical, routes in models.items():
+        entries = [{'provider_id': channel, 'model_id': wire, 'api_key': 'k-' + channel,
+                    'anthropic_base_url': f'https://{channel}.test/anthropic',
+                    'openai_base_url': f'https://{channel}.test/v1'} for channel, wire, _ in routes]
+        d['payloads']['router']['routes'][logical] = {'primary': entries[0], 'fallbacks': entries[1:]}
+        effort = routes[0][2]
+        if effort is not None:
+            d['payloads']['policy'].setdefault('models', {})[logical] = {'capabilities': {'reasoning_effort': effort}}
+        d['payloads']['capabilities']['models'].append({
+            'model': logical, 'supports_thinking': effort is not None, 'supports_vision': False,
+            'context_window_tokens': 200000, 'max_output_tokens': 16000,
+            'thinking_control': {'allowed_values': ['low', 'high', 'max'], 'supported': effort is not None}})
+    return capabilities(d) if capabilities else d
+
+
+def faces_of(tmp_path, data, name='faces'):
+    return read_config(bundle_dir(tmp_path/name, data))
+
+
+def test_one_provider_per_wire_face_not_per_route(tmp_path):
+    """Sixty-eight entries that differed only by which single model each held
+    made the settings page unusable and a key rotation a twenty-times job."""
+    data = many_routes({
+        'alpha': [('tokyo', 'alpha-wire', 'high'), ('osaka', 'alpha-wire', 'high')],
+        'beta': [('tokyo', 'beta-wire', 'high')],
+    })
+    out = faces_of(tmp_path, data)
+    # Two channels, one face each — not three route-shaped providers.
+    assert len(out['providers']) == 2
+    by_name = {v['displayName']: sorted(m['name'] for m in v['models']) for v in out['providers'].values()}
+    assert by_name == {'tokyo': ['alpha', 'beta'], 'osaka': ['alpha']}
+    # One credential per face, not per route.
+    assert len(out['credentials']) == 2
+    # Every approved route is still described, with its rank.
+    assert sorted((r['logical_model'], r['rank']) for r in out['routes']) == [('alpha', 0), ('alpha', 1), ('beta', 0)]
+
+
+def test_a_differing_default_effort_keeps_routes_on_separate_faces(tmp_path):
+    """dsh hangs `reasoning` on the PROVIDER while MMS declares it per model.
+
+    Folding two defaults together would quietly send `high` for a model whose
+    approved default is `max` — the one thing the effort contract forbids.
+    """
+    data = many_routes({
+        'alpha': [('tokyo', 'alpha-wire', 'high')],
+        'beta': [('tokyo', 'beta-wire', 'max')],
+    })
+    out = faces_of(tmp_path, data)
+    assert len(out['providers']) == 2
+    assert sorted(v.get('reasoning') for v in out['providers'].values()) == ['high', 'max']
+    # Same channel twice, so the names have to say which is which.
+    assert sorted(v['displayName'] for v in out['providers'].values()) == ['tokyo · high', 'tokyo · max']
+
+
+def test_two_models_sharing_one_wire_id_on_a_face_are_refused(tmp_path):
+    """dsh keys a face's models by wire id; folding both would silently shadow one."""
+    data = many_routes({
+        'alpha': [('tokyo', 'same-wire', 'high')],
+        'beta': [('tokyo', 'same-wire', 'high')],
+    })
+    out = faces_of(tmp_path, data)
+    assert len(out['providers']) == 1
+    assert [m['name'] for m in list(out['providers'].values())[0]['models']] == ['alpha']
+    assert [e['model'] for e in out['excluded']] == ['beta']
+    assert 'wire id' in out['excluded'][0]['reason']

@@ -339,6 +339,13 @@
 
 - [x] **C14.01 已有项目按名字/完整路径搜索并确认实际cwd**（原版 P；fork：已验；[E03](MIGRATION-EVIDENCE.md#e03)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：fork Host已有项目可搜；明确确认后bash pwd与选择一致。
 - [x] **C14.02 路径直达、打开focus、无效路径不误采用旧目录**（原版 R；fork：已验；[E08](MIGRATION-EVIDENCE.md#e08)、[E17](MIGRATION-EVIDENCE.md#e17)）。验收：路径加载失败保留错误，旧异步响应不覆盖新输入。
+- [x] **C01.10 provider 按 wire face 归并，不再一条 route 一个 provider**（fork 自加 2026-09-20）。验收：设置页每个通道一张卡，改一次密钥即可；每个模型的默认 effort 不被邻居压掉。
+  - 起因：机主在设置页看到 68 张卡，每张只挂一个模型，同一个密钥存了 20 遍，`获取可用模型` 毫无意义。
+  - 实现：`convert_bundle` 按 `(通道, 地址, 协议, 默认 effort)` 归并，68 → 15。通道只有一个 face 时就叫通道名，有多个才缀上区分点。
+  - **默认 effort 必须进分组键**：dsh 把 `reasoning` 挂在 provider 上（`PiAiProviderConfig.reasoning`），MMS 按模型声明，而切模型时 UI 不带 effort、直接继承 provider 默认值。折在一起会让 `max` 的模型拿到 `high`——正好是 AGENT.md「k3/glm 干活要 max effort」那条。只按通道分是 7 组，代价是这个，不接受。
+  - 同一个 face 里两个逻辑模型撞同一个 wire id 会被**拒绝并记入 excluded**，因为 dsh 按 wire id 索引模型，折进去会悄悄互相覆盖。
+  - rank（`· 备用`）从显示名改走数据：新增 `mmsCatalog/ranks` 读 `routes.json`，`foldCatalog(groups, ranks)` 按真实 rank 排序。没有 rank 的 provider（上游自带的）排最后，不能冒充主通道。
+  - **只迁 `settings.yaml` 的默认模型，不改会话历史**：provider id 出现在 `model/selection`（恢复用的当前选择）和 `assistant/message` / `request/*`（历史记录）。历史记的是「当时真的由哪条路服务」，重写等于伪造。`configure()` 只在默认模型指向已不存在的 provider 时修复它——那是悬空引用，不是偏好。
 - [x] **C14.03 记住上次项目、MMS项目历史与可选zoxide历史**（原版 P；fork：已迁 2026-09-20；[E03](MIGRATION-EVIDENCE.md#e03)）。验收：复用已有记录；不要求用户重新添加全部项目，不新增必装依赖。
   - 实现：`ui-mms` node 半边的 `mmsProjects/search`（`zoxide query`，不起 shell、2s 超时、只读），与对话框本地匹配的已添加项目合并去重；没装 zoxide 或查不到时静默退回原有路径。
   - 实例 HOME 是隔离的，所以 `run.py` 只读透传 `_ZO_DATA_DIR` 指向机主自己的 zoxide 数据库（macOS 在 `~/Library/Application Support/zoxide`，不是 XDG 路径）；不含任何凭据，也不回写。

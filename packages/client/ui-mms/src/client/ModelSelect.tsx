@@ -38,6 +38,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import type { RouteRank } from '@deepseek-ai/dsh-client-ui-mms/types'
 import { foldCatalog, searchModels, type LogicalModel, type ModelFamily } from './model-groups.ts'
 
 /** Upstream's seat face plus the explicit "use for new sessions" verb (C01.06). */
@@ -48,6 +49,11 @@ export type MmsModelSeatInjected = ModelSelectInjected & {
    * @returns whether it was saved, with the Host's confirmation or failure text.
    */
   makeDefault: (selection: ModelSelection) => Promise<{ ok: boolean; text: string }>
+  /**
+   * How MMS ranks each model's channels. Empty when the Host cannot say, and
+   * the channels then keep catalog order rather than claiming a primary.
+   */
+  ranks: readonly RouteRank[]
 }
 import css from './ModelSelect.module.css'
 
@@ -89,7 +95,7 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * @returns the trigger and, while open, the two-level menu.
  */
 export function ModelSelect(
-  { locked, available, directory, load, select, makeDefault, t }:
+  { locked, available, directory, load, select, makeDefault, ranks, t }:
   MmsModelSeatInjected & { locked: boolean } & PropsLocale<'mms-model'>,
 ) {
   const state = useSyncExternalStore(
@@ -123,7 +129,7 @@ export function ModelSelect(
 
   // The catalog, folded back into family -> model -> channel (see
   // ./model-groups.ts for why MMS's one-provider-per-route shape needs it).
-  const families = useMemo(() => foldCatalog(state.groups), [state.groups])
+  const families = useMemo(() => foldCatalog(state.groups, ranks), [state.groups, ranks])
   const shownFamily = families.find(family => family.key === familyKey)
   const hits = useMemo(() => searchModels(families, query), [families, query])
   const choices = useMemo(() => state.groups.flatMap(group =>
@@ -666,7 +672,7 @@ export function ModelSelect(
                   >
                     <span className={css.optionCopy}>
                       <span className={css.modelName}>{channel.label}</span>
-                      {channel.fallback && <span className={css.channelTag}>{t('channel.fallback')}</span>}
+                      {channel.rank > 0 && <span className={css.channelTag}>{t('channel.fallback')}</span>}
                     </span>
                     <span className={css.check}>
                       {selected ? <IconCheckOutline16 /> : null}

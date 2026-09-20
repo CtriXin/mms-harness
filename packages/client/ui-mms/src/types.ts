@@ -63,3 +63,13 @@ export interface RemoteAccessState {
    */
   installed: boolean
 }
+
+/** How MMS ranks one model's use of one channel. */
+export interface RouteRank {
+  /** Logical model name, as the catalog shows it. */
+  model: string
+  /** Provider id serving it (one MMS wire face). */
+  provider: string
+  /** 0 is this model's primary channel; higher is a fallback. */
+  rank: number
+}

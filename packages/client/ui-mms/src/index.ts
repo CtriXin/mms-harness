@@ -3,7 +3,8 @@
  * the browser half shipped through `exports["./client"]`, it owns the one Host
  * capabilities this overlay needs and upstream has no seam for: ranking
  * project folders for the folder dialog's search box (`ctx.remote.mmsProjects`)
- * and driving remote access from Settings (`ctx.remote.mmsRemote`).
+ * driving remote access from Settings (`ctx.remote.mmsRemote`), and how MMS
+ * ranks each model's channels (`ctx.remote.mmsCatalog`).
  */
 
 import { Context } from '@deepseek-ai/cordis'
@@ -11,9 +12,11 @@ import { Context } from '@deepseek-ai/cordis'
 // manifest shape the generated face exports.
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry/types'
+import { MmsCatalogController } from './catalog.ts'
 import { MmsProjectSearchController } from './projects.ts'
 import { MmsRemoteAccessController, type Config } from './remote-access.ts'
 
+export { MmsCatalogController } from './catalog.ts'
 export { MmsProjectSearchController } from './projects.ts'
 export { MmsRemoteAccessController } from './remote-access.ts'
 export type { Config } from './remote-access.ts'
@@ -35,6 +38,7 @@ export type { Config } from './remote-access.ts'
  */
 export function apply(ctx: Context, config: Config = {}): void {
   ctx.plugin(MmsProjectSearchController)
+  ctx.plugin(MmsCatalogController)
   ctx.plugin(MmsRemoteAccessController, config)
   ctx.inject(['typert'], (scope: Context) => {
     scope.effect(() => {

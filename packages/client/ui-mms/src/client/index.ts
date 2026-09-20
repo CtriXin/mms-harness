@@ -27,11 +27,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-// The node half's `mmsProjects` Remote namespace (self-reference to this
-// package's generated remote face): the import carries both the declaration
-// merge and the contribution value mounted below.
-import mmsProjectsRemote from '@deepseek-ai/dsh-client-ui-mms/remote'
-import type { RemoteAccessState, RemoteMode } from '@deepseek-ai/dsh-client-ui-mms/types'
+// This package's generated remote face (self-reference): one contribution
+// carrying every namespace its node half owns — `mmsProjects`, `mmsRemote`
+// and `mmsCatalog` — plus the declaration merge that types them.
+import mmsNamespaces from '@deepseek-ai/dsh-client-ui-mms/remote'
+import type { RemoteAccessState, RemoteMode, RouteRank } from '@deepseek-ai/dsh-client-ui-mms/types'
 import { MmsBrandName } from './Brand.tsx'
 import { BrowseDirectoryFlow, type BrowseFlowInjected } from './flow.ts'
 import { ModelSelect, type MmsModelSeatInjected } from './ModelSelect.tsx'
@@ -111,6 +111,10 @@ export function apply(ctx: ClientContext): void {
   // Same shape for the settings switch: empty until the namespace is live,
   // and the row draws nothing rather than offering a dead control.
   const remoteAccess: RemoteAccessInjected = { load: async () => null, setMode: async () => null }
+  // MMS's per-model channel ranking, which used to ride in the provider's
+  // display name. Empty until the namespace is live; the seat then keeps
+  // catalog order instead of claiming a primary it cannot know.
+  const routeRanks: { rows: readonly RouteRank[] } = { rows: [] }
   ctx.inject(['remote'], (scope: ClientContext) => {
     scope.effect(() => {
       let dispose: (() => Promise<void>) | undefined
@@ -118,7 +122,7 @@ export function apply(ctx: ClientContext): void {
       // Through a resolved promise so a Host whose `remote` predates `$mount`
       // throws INTO this chain instead of past it: the overlay must degrade,
       // never take the client down with an unhandled rejection.
-      void Promise.resolve().then(() => scope.remote.$mount(mmsProjectsRemote)).then((settle) => {
+      void Promise.resolve().then(() => scope.remote.$mount(mmsNamespaces)).then((settle) => {
         // Disposal can win the race against the mount; the late arrival must
         // still be released rather than left registered on a dead scope.
         if (disposed) return settle()
@@ -128,13 +132,13 @@ export function apply(ctx: ClientContext): void {
         // Degrading silently here cost hours once: the search box simply
         // answered nothing and no surface said why. The folder dialog still
         // works without the namespace, but the reason is now findable.
-        console.error('[mms] project search namespace unavailable:', error)
+        console.error('[mms] remote namespaces unavailable:', error)
       })
       return () => {
         disposed = true
         void dispose?.()
       }
-    }, 'ui-mms: project search namespace')
+    }, 'ui-mms: remote namespaces')
   })
 
   // The namespace itself must be injected too — cordis tracks `remote.<ns>`
@@ -177,6 +181,21 @@ export function apply(ctx: ClientContext): void {
       remoteAccess.setMode = (mode: RemoteMode) => answer(() => ready.remote.mmsRemote.setMode(mode))
       return () => { Object.assign(remoteAccess, previous) }
     }, 'ui-mms: remote access call')
+  })
+
+  ctx.inject(['remote', 'remote.mmsCatalog'], (ready: ClientContext) => {
+    ready.effect(() => {
+      let disposed = false
+      void ready.remote.mmsCatalog.ranks().then((result) => {
+        if (disposed) return
+        if (result.ok) routeRanks.rows = result.value
+        else console.error('[mms] route ranks unavailable:', result.error)
+      }).catch((error: unknown) => { console.error('[mms] route ranks threw:', error) })
+      return () => {
+        disposed = true
+        routeRanks.rows = []
+      }
+    }, 'ui-mms: route ranks')
   })
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
@@ -226,6 +245,7 @@ export function apply(ctx: ClientContext): void {
         const available = sessions.subagentAddress(sessionId) === undefined
         return {
           available,
+          ranks: routeRanks.rows,
           directory: directory.store,
           load: () => {
             if (available) directory.load().catch(() => { /* surfaced on the store */ })
