@@ -129,6 +129,7 @@ python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.co
 - 停止即结束后台 job，不再自己醒来
 - 升级/回滚带预检与恢复
 - 项目按名字或路径打开（含 zoxide 常用目录：输入 `down` 命中 Downloads，回车直接打开，2026-09-20 实测）
+- 机主自己的 skill 库在会话里可用（`~/.claude/skills` + `~/.agents/skills` 只读挂载，工作区自带的同名 skill 优先）
 
 ### 5.2 未做 / 半做里：下一刀优先（真有用）
 

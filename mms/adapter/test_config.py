@@ -2,12 +2,13 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import stat
 import sys
 from pathlib import Path
 import pytest
 sys.path.insert(0, str(Path(__file__).parent))
-from config import convert_bundle, configure, read_config, safe_url
+from config import convert_bundle, configure, read_config, safe_url, shared_skill_dirs
 from run import launch_env
 from mms_consumer_bundle import EXPECTED_BUNDLE_FILES, ConsumerBundleError
 
@@ -190,3 +191,55 @@ def test_ui_overlay_row_names_its_file_only_when_installed(tmp_path):
     overlay=tmp_path/'runtime/node_modules/@deepseek-ai/dsh-client-ui-mms'
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()),ui_overlay=overlay)
     assert rows()==[{'id':'mms-ui','name':str(overlay/'lib/index.js')}]
+
+
+def skill_root(path):
+    """A skill root as the filesystem provider recognises one: `<root>/<name>/SKILL.md`."""
+    path.mkdir(parents=True)
+    (path/'a-skill').mkdir()
+    (path/'a-skill'/'SKILL.md').write_text('---\nname: a-skill\n---\n', encoding='utf8')
+    return path
+
+
+def test_shared_skill_roots_reach_the_isolated_host(tmp_path, monkeypatch):
+    """The private HOME empties every user-level skill root DSH would scan.
+
+    Without this the Host sees only the skills that happen to live inside the
+    opened workspace, and the operator's own library is invisible to it.
+    """
+    first = skill_root(tmp_path/'claude-skills'); second = skill_root(tmp_path/'agents-skills')
+    monkeypatch.setenv('MMS_DSH_SKILL_DIRS', os.pathsep.join(
+        [str(first), str(second), str(tmp_path/'absent'), str(first)]))
+    configure(bundle_dir(tmp_path, payload()), tmp_path/'instance', 'deepseek-test')
+    patch = json.loads((tmp_path/'instance/mms.patch.yml').read_text())
+    entry = next(e for e in patch if e.get('id') == 'skill-filesystem')
+    # Order is precedence; a root that does not exist is never named, and one
+    # named twice is mounted once so precedence cannot depend on the spelling.
+    assert entry['config']['customSkillDirs'] == [str(first), str(second)]
+    # The Web bundle disables this row and lets each agent preset mount its own,
+    # so configuring it without re-enabling it is silently inert — that is
+    # exactly how this failed the first time, with no error anywhere.
+    assert entry['disabled'] is False
+    # The preset's own provider already owns the workspace and user roots; a
+    # second copy of them in the global layer only duplicates their watchers.
+    assert entry['config']['includeDefaultRoots'] is False
+
+
+def test_no_shared_skill_root_leaves_the_provider_untouched(tmp_path, monkeypatch):
+    """Naming nothing must not hand the Host an empty override to honour."""
+    monkeypatch.setenv('MMS_DSH_SKILL_DIRS', str(tmp_path/'nowhere'))
+    configure(bundle_dir(tmp_path, payload()), tmp_path/'instance', 'deepseek-test')
+    patch = json.loads((tmp_path/'instance/mms.patch.yml').read_text())
+    assert not any(e.get('id') == 'skill-filesystem' for e in patch)
+
+
+def test_shared_skill_roots_default_to_the_operators_own_libraries(tmp_path, monkeypatch):
+    """Unset means the two roots the operator's other agents already use."""
+    monkeypatch.delenv('MMS_DSH_SKILL_DIRS', raising=False)
+    home = tmp_path/'home'; monkeypatch.setattr(Path, 'home', staticmethod(lambda: home))
+    monkeypatch.setenv('HOME', str(home))
+    skill_root(home/'.agents/skills')
+    # Only the root that exists is named, in the documented precedence order.
+    assert shared_skill_dirs() == [str(home/'.agents/skills')]
+    skill_root(home/'.claude/skills')
+    assert shared_skill_dirs() == [str(home/'.claude/skills'), str(home/'.agents/skills')]

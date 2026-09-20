@@ -161,7 +161,13 @@
 
 - [ ] **C06.01 任务型 bundled Skills 与可发现的选择入口**（原版 P；fork：未迁；[E03](MIGRATION-EVIDENCE.md#e03)、[E04](MIGRATION-EVIDENCE.md#e04)）。验收：实际会话可读取并使用任务 Skill，不只目录存在。
 - [ ] **C06.02 用户/项目/bundled 优先级与同名冲突来源**（原版 P；fork：部分；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：用户或项目覆盖可见；Recipe要求唯一可用 Skill。
-- [ ] **C06.03 可选合并本机 Skills，默认关闭且只读源目录**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：开关作用于会话读取层，不强装、不改全局 Skills。
+- [x] **C06.03 可选合并本机 Skills，默认关闭且只读源目录**（原版 P；fork：已迁 2026-09-20；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：开关作用于会话读取层，不强装、不改全局 Skills。
+  - 实现：`configure()` 把 host 面的 `skill-filesystem` 行重新启用，只带 `customSkillDirs`（`includeDefaultRoots: false`），指向机主已有的共享 skill 根 `~/.claude/skills`、`~/.agents/skills`；不存在的根不写进去。只读源目录，不复制、不安装、不改全局，xmem 等仍是机主 global 的那一份。
+  - **必须改 host 面那一行，不能只配它**：Web bundle 把 host 的 `skill-filesystem` 行 `disabled: true` 了，local 发现交给每个 agent preset 各自挂一份（`dsh-agent-presets/presets/*/agent.cordis.yml`）。给一个已禁用的行配 config 完全无效，而且不报任何错——2026-09-20 就是这样先得出「共享库看不见」的错误结论，实测才定位到是配错了行。Web bundle 自己的注释把 global 层留给「deployment 级 provider」，host 行正是这个缝。
+  - 层级：preset 层同名 skill 压过 global 层，所以工作区自带的 `.agents/skills` 仍然优先；preset 已经拥有工作区和 user 根，host 行因此关掉默认根，避免重复挂一遍（连同 watcher）。
+  - 实例 HOME 是隔离的，所以 DSH 自己的三个 user 级根（`$DSH_HOME/skills`、`~/.agents/skills`、bundled）全是空的；不接这一条，会话里就只看得见当前工作区自带的 `.dsh/skills` / `.agents/skills`。
+  - 实测（2026-09-20，隔离实例 + 一次性 `/skillcheck` 探针按 agent scope 读 `ctx.skills.list`）：接之前 2 个（只有工作区和 `$DSH_HOME` 自带的），接之后 92 个，`stride`、`ego-browser`、`impeccable`、`pilot` 都在；工作区自带的那个仍在列。
+  - **与原版差一处，是机主明确要的**：原版默认关闭，fork 默认开启——本安装只服务机主本人，每次开会话再去开一个开关是白费点击。关掉用 `MMS_DSH_SKILL_DIRS=`（空值即不挂载），换目录用同一个变量（`os.pathsep` 分隔）。
 - [ ] **C06.04 Weber 统一入口、浏览器 backend 与登录态边界**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：选择合适 backend；不拿隔离浏览器冒充已登录操作。
 - [ ] **C06.05 选择 Skill/工作包只准备草稿，不隐式执行**（原版 P；fork：未迁；[E03](MIGRATION-EVIDENCE.md#e03)、[E04](MIGRATION-EVIDENCE.md#e04)）。验收：明确发送才运行，刷新和取消保留预期状态。
 - [ ] **C06.06 会话 scoped 扩展/hooks 及退休项不复活**（原版 P；fork：未迁；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：保留能力，禁止重新强装退休全局 hooks/token-saver。

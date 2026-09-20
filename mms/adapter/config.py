@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -191,6 +192,46 @@ def seed_default_selection(path: Path, selection: dict):
     path.write_text(text + ('' if not text or text.endswith('\n') else '\n') + block)
 
 
+# Skill roots the operator already maintains for their other agents. The
+# instance's private HOME empties every user-level root DSH would otherwise
+# scan (`$DSH_HOME/skills`, `~/.agents/skills`), so without this the Host sees
+# only the skills that happen to live inside the opened workspace.
+#
+# A skill is instruction text and scripts, not an account: these roots carry no
+# token, no OAuth state and no owner identity, nothing writes to them, and the
+# private HOME still governs every other host path. This is the same narrow,
+# read-only kind of pointer as the zoxide database, not a real-HOME fallback.
+SHARED_SKILL_DIRS = ('~/.claude/skills', '~/.agents/skills')
+
+
+def shared_skill_dirs():
+    """Shared skill roots that actually exist, in precedence order.
+
+    `MMS_DSH_SKILL_DIRS` (`os.pathsep`-separated) replaces the list outright,
+    including with an empty value to mount none. A named root that is not a
+    directory is dropped rather than handed to the Host, so a typo degrades to
+    the workspace's own skills instead of a provider that lists nothing.
+    """
+    override = os.environ.get('MMS_DSH_SKILL_DIRS')
+    names = override.split(os.pathsep) if override is not None else SHARED_SKILL_DIRS
+    roots, seen = [], set()
+    for name in names:
+        path = Path(name).expanduser()
+        if not name or not path.is_dir():
+            continue
+        # Two names for one directory would make the duplicate-name precedence
+        # below depend on which spelling came first.
+        try:
+            key = path.resolve()
+        except OSError:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(str(path))
+    return roots
+
+
 def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plugin_path=None, previous_credentials=None,
               ui_overlay: Path | None = None):
     data = read_config(root)
@@ -242,6 +283,25 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
         {'insert': [{'id': 'mms-remote', 'name': str(Path(__file__).with_name('plugin-remote.mjs')),
                      'config': {'installation': str(instance.parent)}}]},
     ]
+    skills = shared_skill_dirs()
+    if skills:
+        # The Web bundle DISABLES the host-plane `skill-filesystem` row, because
+        # every agent preset mounts its own into its own layer of the registry.
+        # Configuring the disabled row does nothing at all — a patch there is
+        # silently inert, which is how this looked like "the shared library is
+        # just invisible" rather than "the wrong row was configured".
+        #
+        # The host row is nonetheless the deployment's seam: the Web bundle's
+        # own comment reserves the global layer for "deployment-level providers
+        # — repository plugins, a host skill-filesystem row". So it is turned
+        # back on carrying ONLY these roots: `includeDefaultRoots` off, because
+        # the preset's own provider already owns the workspace and user roots
+        # and a second copy would just duplicate them (and their watchers).
+        #
+        # Layering does the rest: a preset-layer skill of the same name beats
+        # the global one, so a workspace's own `.agents/skills` still wins.
+        patch.append({'id': 'skill-filesystem', 'disabled': False,
+                      'config': {'includeDefaultRoots': False, 'customSkillDirs': skills}})
     if ui_overlay is not None:
         # Fork UI overlay: shadows the brand name, model seat and folder dialog
         # at a lower slot priority; upstream occupants stay loaded underneath.
