@@ -1,12 +1,18 @@
 """Upgrade guards that the live L8 run cannot reach cheaply (C11.01, C11.06, C11.07)."""
 import json
+import os
 import subprocess
+import sys
+from pathlib import Path
 import urllib.error
 import urllib.request
 
 import pytest
 
 import upgrade as up
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import install as inst
 
 
 def repo_with_build(tmp_path, env):
@@ -85,3 +91,80 @@ def test_relocate_points_config_and_launcher_at_the_final_root(tmp_path):
     assert config['runtime'] == str(root / 'runtime') and config['instance'] == str(root / 'instance')
     assert config['mms_root'] == '/elsewhere' and config['port'] == 3092
     assert str(staging) not in (root / 'MMS Harness.command').read_text()
+
+
+def shortcut_home(tmp_path, monkeypatch, applications=True):
+    """A fake HOME and /Applications so shortcut writes never touch the real ones."""
+    home = tmp_path/'home'; (home/'Applications').mkdir(parents=True)
+    monkeypatch.setattr(Path, 'home', staticmethod(lambda: home))
+    system = tmp_path/'system-applications'
+    if applications:
+        system.mkdir()
+    monkeypatch.setattr(inst, 'SYSTEM_APPLICATIONS', system)
+    launcher = tmp_path/'install'/'MMS Harness.command'
+    launcher.parent.mkdir()
+    launcher.write_text('#!/bin/sh\nexec true "$@"\n')
+    return home, system, launcher
+
+
+def test_shortcuts_land_on_path_and_in_applications(tmp_path, monkeypatch):
+    """The launcher lived where nobody could find it: buried under ~/.local/share.
+
+    A `~/Applications` copy does not fix it either — the Finder sidebar's
+    「应用程序」 is `/Applications`, a different folder.
+    """
+    home, system, launcher = shortcut_home(tmp_path, monkeypatch)
+    inst.link_shortcuts(launcher)
+    command = home/'.local/bin/mms-harness'
+    assert command.is_symlink() and command.resolve() == launcher.resolve()
+    binary = system/'MMS Harness.app/Contents/MacOS/mms-harness'
+    # A bundle, not a `.command`: Spotlight and Launchpad list applications.
+    assert (system/'MMS Harness.app/Contents/Info.plist').is_file()
+    # Double-clicking carries no arguments, so the bundle can only mean `open`.
+    assert str(launcher) in binary.read_text() and binary.read_text().rstrip().endswith('open')
+    assert binary.stat().st_mode & 0o111
+
+
+def test_shortcuts_fall_back_to_the_user_applications_folder(tmp_path, monkeypatch):
+    """No write access to /Applications is a reason to use ~/Applications, not to give up."""
+    home, system, launcher = shortcut_home(tmp_path, monkeypatch, applications=False)
+    inst.link_shortcuts(launcher)
+    assert not system.exists()
+    assert (home/'Applications/MMS Harness.app/Contents/MacOS/mms-harness').is_file()
+
+
+def test_shortcuts_replace_our_old_link_but_never_someone_else_s_file(tmp_path, monkeypatch, capsys):
+    """A stale link from the previous install is ours to move; a real file is not."""
+    home, system, launcher = shortcut_home(tmp_path, monkeypatch)
+    command = home/'.local/bin/mms-harness'
+    command.parent.mkdir(parents=True)
+    command.symlink_to(tmp_path/'an-older-installation')
+    inst.link_shortcuts(launcher)
+    assert command.resolve() == launcher.resolve()
+
+    command.unlink(); command.write_text('someone else owns this name\n')
+    inst.link_shortcuts(launcher)
+    assert command.read_text() == 'someone else owns this name\n'
+    # Recognised and reported as someone else's name, not attempted and blamed
+    # on the filesystem: the operator has to know which of the two happened.
+    assert 'left alone' in capsys.readouterr().err
+
+
+def test_one_unwritable_shortcut_does_not_take_the_others_with_it(tmp_path, monkeypatch):
+    """Shortcuts are a convenience; a complete installation must not fail for them."""
+    home, system, launcher = shortcut_home(tmp_path, monkeypatch)
+    (home/'.local').mkdir()
+    (home/'.local/bin').write_text('not a directory\n')  # the PATH link cannot be made
+    made = inst.link_shortcuts(launcher)
+    assert not (home/'.local/bin').is_dir()
+    # The bundle is unaffected, and the installation is still reported complete.
+    assert made == [system/'MMS Harness.app']
+
+
+def test_an_unwritable_bundle_path_falls_back_instead_of_failing(tmp_path, monkeypatch):
+    """A shortcut that cannot be written is not a reason to fail the install."""
+    home, system, launcher = shortcut_home(tmp_path, monkeypatch)
+    (system/'MMS Harness.app').write_text('something else holds this name\n')
+    made = inst.link_shortcuts(launcher)
+    assert (home/'Applications/MMS Harness.app/Contents/MacOS/mms-harness').is_file()
+    assert made == [home/'.local/bin/mms-harness', home/'Applications/MMS Harness.app']

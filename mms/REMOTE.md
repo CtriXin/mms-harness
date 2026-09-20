@@ -16,12 +16,15 @@
 ## 在终端里
 
 ```bash
-"~/Applications/MMS Harness.command" remote on        # 开启，打印每个局域网地址的链接
-"~/Applications/MMS Harness.command" remote status    # 再次查看链接
-"~/Applications/MMS Harness.command" remote rotate    # 更换口令：旧链接和已登录的设备立即失效
-"~/Applications/MMS Harness.command" remote off       # 关闭：网关退出，局域网上不再有任何监听
-"~/Applications/MMS Harness.command" remote add-host <隧道域名>   # 外网：登记 Tailscale / Cloudflare 隧道域名
+mms-harness remote on        # 开启，打印每个局域网地址的链接
+mms-harness remote status    # 再次查看链接
+mms-harness remote rotate    # 更换口令：旧链接和已登录的设备立即失效
+mms-harness remote off       # 关闭：网关退出，局域网上不再有任何监听
+mms-harness remote add-host <隧道域名>   # 外网：登记 Tailscale / Cloudflare 隧道域名
 ```
+
+`mms-harness` 由 `install.py --shortcuts` 链到 `~/.local/bin`；没有它就直接跑
+`~/.local/share/mms-harness/MMS Harness.command`，参数一样。
 
 手机打开链接后，口令会换成一个 HttpOnly cookie，地址栏里的口令随即去掉。之后直接打开 `http://<地址>:<端口>/` 就行。**电脑重启、服务重启都不需要重新扫码**，除非运行过 `rotate`。
 

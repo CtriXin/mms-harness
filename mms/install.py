@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -21,6 +22,8 @@ def main():
     parser.add_argument('--node', type=Path, required=True)
     parser.add_argument('--runtime-from', type=Path)
     parser.add_argument('--port', type=int, default=3092)
+    parser.add_argument('--shortcuts', action='store_true',
+                        help='also link `mms-harness` onto PATH and the launcher into ~/Applications')
     args = parser.parse_args()
     root = args.destination.expanduser().resolve()
     protected = [args.mms_root.expanduser().resolve(), *[(Path.home()/'.config'/n).resolve() for n in ('mms', 'mms-next')]]
@@ -94,6 +97,95 @@ def main():
     launcher.write_text('#!/bin/sh\nexec '+shlex.join([sys.executable, str(root/'source/mms/adapter/service.py'), '--installation', str(root)])+' "$@"\n')
     launcher.chmod(0o700)
     print(launcher)
+    if args.shortcuts:
+        for link in link_shortcuts(launcher):
+            print(link)
+
+
+def link_shortcuts(launcher: Path):
+    """Put the launcher where the operator will actually look for it.
+
+    Three answers to two different questions. `mms-harness` on PATH takes the
+    subcommands (`start`, `stop`, `status`, `remote`, `upgrade`). The bundle in
+    `/Applications` is what a double-click, Spotlight or Launchpad opens; it
+    can carry no arguments, so it can only ever mean `open`. A plain `.command`
+    would not do: Launchpad and Spotlight list application bundles, and a
+    `~/Applications` copy is a different folder from the `/Applications` the
+    Finder sidebar shows — which is exactly how the last one went unfound.
+
+    Off unless asked for, and `upgrade.py` never asks: it installs into a
+    STAGING directory that is renamed away on cutover, so anything pointing
+    there would dangle. The installation root does not move between upgrades,
+    so shortcuts made once at install time keep working.
+
+    A path already held by something that is not ours is left alone, and none
+    of this is worth failing an otherwise complete installation over.
+    """
+    made = []
+    command = Path.home()/'.local/bin'/'mms-harness'
+    try:
+        command.parent.mkdir(parents=True, exist_ok=True)
+        if command.is_symlink():
+            command.unlink()
+        if command.exists():
+            print(f'left alone (not a link): {command}', file=sys.stderr)
+        else:
+            command.symlink_to(launcher)
+            made.append(command)
+    except OSError as error:
+        print(f'could not link {command}: {error}', file=sys.stderr)
+    # `/Applications` is admin-writable for the installing user on a normal
+    # macOS setup; `~/Applications` is the fallback, not the first choice.
+    for folder in (SYSTEM_APPLICATIONS, Path.home()/'Applications'):
+        if not os.access(folder, os.W_OK):
+            continue
+        try:
+            made.append(write_app_bundle(folder/'MMS Harness.app', launcher))
+        except OSError as error:
+            print(f'could not write {folder}/MMS Harness.app: {error}', file=sys.stderr)
+            continue
+        break
+    return made
+
+
+def write_app_bundle(bundle: Path, launcher: Path) -> Path:
+    """Write a minimal double-click bundle that opens this installation."""
+    binary = bundle/'Contents/MacOS/mms-harness'
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    (bundle/'Contents/Info.plist').write_text(PLIST)
+    binary.write_text('#!/bin/sh\n# Opens this MMS Harness installation, starting the service if needed.\n'
+                      'exec ' + shlex.join([str(launcher), 'open']) + '\n')
+    binary.chmod(0o755)
+    # Without this the bundle stays absent from Spotlight and Launchpad until
+    # some later rescan notices it. Absent off macOS, where the bundle is
+    # written anyway rather than reported as a failure the caller would retry.
+    if Path(LSREGISTER).exists():
+        subprocess.run([LSREGISTER, '-f', str(bundle)], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return bundle
+
+
+SYSTEM_APPLICATIONS = Path('/Applications')
+
+LSREGISTER = ('/System/Library/Frameworks/CoreServices.framework/Frameworks'
+              '/LaunchServices.framework/Support/lsregister')
+
+PLIST = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>MMS Harness</string>
+  <key>CFBundleDisplayName</key><string>MMS Harness</string>
+  <key>CFBundleIdentifier</key><string>com.ctrixin.mms-harness.launcher</string>
+  <key>CFBundleExecutable</key><string>mms-harness</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+"""
 
 
 if __name__ == '__main__':

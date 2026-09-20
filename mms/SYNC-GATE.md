@@ -25,7 +25,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 | O7 | C13.03 | `mms/adapter/test_stop.mjs` | 5 项全过：用户停止先 kill 本 agent 仍在跑的 job 再照常取消；其他原因的取消不 kill；kill 失败不挡停止；不重复包装 | 不证明上游仍调用 `agent.cancel({kind:'user'})`，那条由 L5 兜底 |
 | O8 | C13.15 | `mms/adapter/test_plan.mjs` | 7 项全过：计划模式只放行 6 个只读工具，其他全部拒绝且拒绝原因写明 `/plan off` 和「不是 OS sandbox」；非计划模式和其他 agent 不受影响；plan 状态读不到时放行并记日志 | 不证明 host 真的加载了插件，那条由 W3 和 L6 兜底 |
 | O9 | C13.06/.07 | `mms/adapter/test_btw.mjs` | 6 项全过：projection 只收人和模型的文字、限 12 条、截断、打码；请求用会话最近的主路由；卡片写明模型和用量；失败和未发请求都如实说 | 不发真实请求 |
-| O10 | C11.01/.06/.07 | `mms/adapter/test_upgrade.py` | 6 项全过：只认从当前代码构建、带 MMS 标题、非 dirty 的产物（`mms/` 改动不需要重建）；探测绕过环境代理、拒绝跳出 127.0.0.1 的重定向；切换后路径和端口指向最终目录 | 不跑真实安装，那条由 L8 覆盖 |
+| O10 | C11.01/.06/.07 | `mms/adapter/test_upgrade.py` | 11 项全过：只认从当前代码构建、带 MMS 标题、非 dirty 的产物（`mms/` 改动不需要重建）；探测绕过环境代理、拒绝跳出 127.0.0.1 的重定向；切换后路径和端口指向最终目录；`--shortcuts` 写 PATH 命令和 `/Applications` 的 app bundle，占用的真实文件不动、写不了就退到 `~/Applications`、任一处失败都不影响安装 | 不跑真实安装，那条由 L8 覆盖 |
 | O11 | C01.06 | `mms/adapter/test_default_model.mjs` | 4 项全过：会话里切模型不再写默认；`/default-model` 只接受菜单发来的完整选择，写入默认；卸载插件恢复上游行为 | 不证明上游只有这一处写默认，由 L9 兜底 |
 | O4 | — | 当前 HEAD 对 `upstream/master` merge-base 的 diff，逐文件对照 `UPSTREAM-PATCHES.md` | 改到的上游文件全部已登记 | 不判断改动内容对不对 |
 | O5 | — | `--build`：`DSH_CLIENT_TITLE="MMS Harness" pnpm run build` | 退出码 0 | — |

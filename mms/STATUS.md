@@ -45,11 +45,14 @@
 git clone -b mms git@github.com:CtriXin/mms-harness.git && cd mms-harness
 pnpm install --frozen-lockfile
 DSH_CLIENT_TITLE="MMS Harness" pnpm run build
-python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.config/mms-next --node "$(which node)"
+python3 mms/install.py --destination ~/.local/share/mms-harness --mms-root ~/.config/mms-next --node "$(which node)" --shortcuts
 ```
 
 - 需要 Node 24.2 以上，并且这台机器上要有 `~/.config/mms-next`。
-- 以后更新直接运行 `upgrade`。
+- `--shortcuts` 把 `mms-harness` 链到 `~/.local/bin`，并在 `/Applications` 放一个 `MMS Harness.app`（不可写时退到 `~/Applications`）。
+  日常就用 `mms-harness start|stop|status|open|remote|upgrade|rollback`；双击 app 等同 `open`。
+  `upgrade` 不带这个参数：它装的是随后会被改名掉的 staging 目录，链过去会悬空；安装根不随升级改变，所以装一次就一直有效。
+- 以后更新直接运行 `mms-harness upgrade`。
 - **只在 macOS 上验证过**。启动器 `.command`、`/bin/ps`、`/sbin/ifconfig` 这几处在 Linux 上能不能用还没验证。
 
 ### 界面里
