@@ -59,14 +59,25 @@ def main():
     for package_path in sorted((ROOT/'packages').glob('*/*/package.json')):
         package = json.loads(package_path.read_text())
         destination = runtime/'node_modules'/package['name']/'lib'
+        # Fork-only client packages (never published) are added beside the
+        # upstream ones; anything else absent from the runtime is skipped.
+        fork_only = bool(package.get('private') and 'client' in package.get('dsh', {}))
         if not destination.is_dir():
-            # Fork-only client packages (never published) are added beside
-            # the upstream ones; anything else absent from the runtime is skipped.
-            if not (package.get('private') and 'client' in package.get('dsh', {})):
+            if not fork_only:
                 continue
             destination.mkdir(parents=True)
+        if fork_only:
+            # The node half ships with this build too. Refreshing only
+            # `client*.js` left a STALE host half behind whenever the runtime
+            # was copied from an existing installation (`--runtime-from`),
+            # because the destination already existed: a fork package that
+            # grows host-side behavior would silently keep the old one.
             shutil.copy2(package_path, destination.parent/'package.json')
-            shutil.copy2(package_path.parent/'lib/index.js', destination/'index.js')
+            for face in ('index.js', 'typert.host.js', 'typert.remote-client.js'):
+                source = package_path.parent/'lib'/face
+                if source.is_file():
+                    shutil.copy2(source, destination/face)
+                    artifacts[package['name']+'/'+face] = hashlib.sha256(source.read_bytes()).hexdigest()
         for artifact in sorted((package_path.parent/'lib').glob('client*.js*')):
             shutil.copy2(artifact, destination/artifact.name)
             artifacts[package['name']+'/'+artifact.name] = hashlib.sha256(artifact.read_bytes()).hexdigest()

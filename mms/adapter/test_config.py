@@ -83,6 +83,44 @@ def test_clean_environment(tmp_path,monkeypatch):
     assert e['HOME']==str(tmp_path/'user-home')
 
 
+def test_zoxide_database_is_pointed_at_but_never_copied(tmp_path,monkeypatch):
+    """The private HOME would hide the operator's own zoxide database (C14.03).
+
+    The instance is told where it lives, read-only; every other host path stays
+    isolated. Without a database, nothing is passed at all.
+    """
+    data=tmp_path/'host-zoxide'; data.mkdir()
+    monkeypatch.setenv('_ZO_DATA_DIR',str(data))
+    e=launch_env(tmp_path/'inst',Path('/usr/bin/node'))
+    # No database yet: the search degrades rather than naming a missing path.
+    assert '_ZO_DATA_DIR' not in e
+    (data/'db.zo').write_bytes(b'')
+    e=launch_env(tmp_path/'inst',Path('/usr/bin/node'))
+    assert e['_ZO_DATA_DIR']==str(data)
+    # The isolation the pointer must not widen.
+    assert e['HOME']==str(tmp_path/'inst/user-home')
+    assert e['XDG_DATA_HOME']==str(tmp_path/'inst/user-home/.local/share')
+
+
+def test_zoxide_pointer_finds_the_platform_database_macos_included(tmp_path,monkeypatch):
+    """macOS zoxide lives under Library/Application Support, NOT the XDG path.
+
+    Resolving it the XDG way found an empty directory and the search silently
+    returned nothing on the very machine this is for.
+    """
+    monkeypatch.delenv('_ZO_DATA_DIR',raising=False)
+    monkeypatch.delenv('XDG_DATA_HOME',raising=False)
+    home=tmp_path/'home'; monkeypatch.setattr(Path,'home',staticmethod(lambda:home))
+    mac=home/'Library/Application Support/zoxide'; xdg=home/'.local/share/zoxide'
+    mac.mkdir(parents=True); (mac/'db.zo').write_bytes(b'')
+    expected=str(mac) if sys.platform=='darwin' else None
+    e=launch_env(tmp_path/'inst',Path('/usr/bin/node'))
+    if expected: assert e['_ZO_DATA_DIR']==expected
+    # An operator whose database sits at the XDG path is still found.
+    (mac/'db.zo').unlink(); xdg.mkdir(parents=True); (xdg/'db.zo').write_bytes(b'')
+    assert launch_env(tmp_path/'inst',Path('/usr/bin/node'))['_ZO_DATA_DIR']==str(xdg)
+
+
 @pytest.mark.parametrize('url',['https://secret@example.test/v1','https://example.test/v1?key=secret'])
 def test_endpoint_rejects_credential_leaks(url):
     with pytest.raises(ValueError): safe_url(url)

@@ -6,10 +6,39 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from config import configure
 
 HERE = Path(__file__).resolve().parent
+
+
+def zoxide_data_dir():
+    """Where the operator's own zoxide keeps its frecency database.
+
+    The instance runs on a private HOME and XDG_DATA_HOME, so zoxide inside it
+    would read an EMPTY database and the folder dialog's name search would find
+    nothing at all. This is the one host-state path the instance is told about,
+    and it is deliberately narrow: a list of directories the operator has
+    visited in a shell.
+
+    It carries no credential, token, account identity or owner fingerprint, and
+    nothing writes to it — the Host only ever runs `zoxide query`. The private
+    HOME still governs everything else, so this is not a general real-HOME
+    fallback.
+
+    The candidates mirror zoxide's own resolution (`_ZO_DATA_DIR`, else the
+    platform data directory, which on macOS is NOT the XDG path), and the first
+    one that actually holds a database wins — an operator who moved it keeps
+    working.
+    """
+    explicit = os.environ.get('_ZO_DATA_DIR')
+    if explicit:
+        return Path(explicit).expanduser()
+    xdg = os.environ.get('XDG_DATA_HOME')
+    candidates = [Path.home() / 'Library/Application Support/zoxide'] if sys.platform == 'darwin' else []
+    candidates.append((Path(xdg) if xdg else Path.home() / '.local/share') / 'zoxide')
+    return next((path for path in candidates if (path / 'db.zo').is_file()), candidates[0])
 
 
 def launch_env(instance, node):
@@ -21,6 +50,11 @@ def launch_env(instance, node):
         'XDG_DATA_HOME': str(instance / 'user-home/.local/share'), 'DSH_HOME': str(instance / 'home'),
         'DSH_TELEMETRY_DISABLED': '1', 'MMS_DSH_ROUTES': str(instance / 'routes.json'),
         'MMS_DSH_EVIDENCE': str(instance / 'transport.jsonl')})
+    # Read-only pointer at the operator's own zoxide database; see the helper.
+    # Absent on a host without zoxide, and the search simply finds nothing.
+    zoxide = zoxide_data_dir()
+    if (zoxide / 'db.zo').is_file():
+        env['_ZO_DATA_DIR'] = str(zoxide)
     return env
 
 
