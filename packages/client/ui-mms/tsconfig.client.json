@@ -6,31 +6,64 @@
     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
   },
   "files": [
-    "src/client/index.ts",
     "src/client/Brand.tsx",
     "src/client/DirectoryBrowser.tsx",
     "src/client/ModelSelect.tsx",
+    "src/client/RemoteAccess.tsx",
     "src/client/flow.ts",
+    "src/client/index.ts",
     "src/client/locales.ts",
     "src/client/model-groups.ts",
     "src/client/model-locales.ts",
+    "src/client/remote-locales.ts",
     "src/css-modules.d.ts",
     "src/types.ts"
   ],
   "references": [
-    { "path": "../../api/remotes/tsconfig.client.json" },
-    { "path": "../../api/session-controller/tsconfig.client.json" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../locale" },
-    { "path": "../store" },
-    { "path": "../ui-conversation" },
-    { "path": "../ui-model-selection" },
-    { "path": "../ui-primitives" },
-    { "path": "../ui-renderer" },
-    { "path": "../ui-session" },
-    { "path": "../ui-sidebar" },
-    { "path": "../ui-slots" },
-    { "path": "../ui-workspace" },
-    { "path": "../../core/session" }
+    {
+      "path": "../../api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../locale"
+    },
+    {
+      "path": "../store"
+    },
+    {
+      "path": "../ui-conversation"
+    },
+    {
+      "path": "../ui-model-selection"
+    },
+    {
+      "path": "../ui-primitives"
+    },
+    {
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
+    },
+    {
+      "path": "../ui-sidebar"
+    },
+    {
+      "path": "../ui-slots"
+    },
+    {
+      "path": "../ui-workspace"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../ui-settings"
+    }
   ]
 }

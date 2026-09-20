@@ -190,7 +190,10 @@ def test_ui_overlay_row_names_its_file_only_when_installed(tmp_path):
     assert rows()==[]
     overlay=tmp_path/'runtime/node_modules/@deepseek-ai/dsh-client-ui-mms'
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()),ui_overlay=overlay)
-    assert rows()==[{'id':'mms-ui','name':str(overlay/'lib/index.js')}]
+    # The node half drives remote access for the Settings switch, so the row
+    # carries the installation root: without it that switch has nothing to act on.
+    assert rows()==[{'id':'mms-ui','name':str(overlay/'lib/index.js'),
+                     'config':{'installation':str(instance.parent)}}]
 
 
 def skill_root(path):

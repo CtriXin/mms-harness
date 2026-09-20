@@ -184,7 +184,9 @@
 
 回归入口：[tests/test_mms_web_remote_access.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_remote_access.py)；[tests/test_mms_web_remote_access_cookie.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_remote_access_cookie.py)；[tests/test_mms_web_update_auth_transport.py](https://github.com/CtriXin/multi-model-switch/blob/3d4ce70fa50bd3aa05128bfbf5d659071ab07719/tests/test_mms_web_update_auth_transport.py)。路径按新布局核对；此处不等同本轮执行。
 
-- [x] **C07.01 默认关闭的 LAN 访问开关、模式持久化与地址展示**（原版 R；fork：已验，应用内 `/remote` 与 CLI，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：开启后监听正确接口，关闭后释放；本机入口仍可用。
+- [x] **C07.01 默认关闭的 LAN 访问开关、模式持久化与地址展示**（原版 R；fork：已验，设置页开关 + 应用内 `/remote` + CLI，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：开启后监听正确接口，关闭后释放；本机入口仍可用。
+  - 2026-09-20 补设置页的三档开关（关闭 / 仅外网 / 局域网 + 外网），走自有 `mmsRemote` Remote namespace。读走进程内文件、写走 `service.py remote …`——改哪些 socket 只能有一个主人，不能让设置页、`/remote` 和终端各写一份。
+  - 链接按机主要求**明文显示**（含口令）并可一键复制。扫码页的 nonce 门保留：它防的是 `/remote` 把口令写进会话记录（那是会被导出的），而设置页既不入日志也不入导出。错误文案仍然打码，因为那确实会进日志。
 - [x] **C07.02 认证 token、Host/Origin 与无凭据拒绝**（原版 R；fork：已验，gate O6 + 端到端，见 [REMOTE](REMOTE.md)；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：读写/附件/批准均鉴权；不因开放监听绕过保护。
 - [x] **C07.03 二维码与远程地址使用入口**（原版 P；fork：已验，本机限定扫码页，二维码解码逐字核对，口令不进会话日志；[E04](MIGRATION-EVIDENCE.md#e04)）。验收：二维码连接正确地址；敏感 token 不进入公开日志。
 - [x] **C07.04 开启远程或轮换 token 后当前窗口不断登录**（原版 R；fork：已验，2026-09-19 `remote.mjs`：手机上执行 `/remote rotate` 时，网关发现口令在这次请求中变了，就给这台设备下发新 cookie，其他设备和旧链接立即失效。开启远程是在电脑本机窗口里做的，本来就不经过网关。O6 真实 socket 测试，去掉交接逻辑后变红；真手机未测；应用内轮换未做；[E10](MIGRATION-EVIDENCE.md#e10)）。验收：当前窗口 cookie 正确更新，旧 token/无 cookie 拒绝。

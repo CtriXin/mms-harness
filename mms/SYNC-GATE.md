@@ -20,7 +20,7 @@ gate 退出码：0 表示没有失败项。**PENDING 不算通过**，只表示�
 |---|---|---|---|---|
 | O1 | C01/C02 | `mms/adapter/test_config.py` | 19 项全过：凭据缺失、bundle 审批和 hash、能力与协议、隔离环境、默认 effort 写入 settings、`mms-ui` 行按文件路径加载、共享 skill 根只挂存在的目录且不存在时完全不碰上游 provider | 不发真实请求；skill 根挂上之后能不能真被会话读到，只有实测能证明 |
 | O2 | C03/C02 | `test_plugin.mjs` + `test_observe.mjs`，插件取**当前源码**，依赖取固定版本 runtime | 3 项全过：Recipe 能力要求 fail closed，evidence 不记 prompt 和 key | 不走真实 UI |
-| O3 | C14.01/.02/.03、C12、C15 | vitest 跑自有覆盖包 `packages/client/ui-mms`，外加它所覆盖的三个上游包（原样未改）的测试 | 全过（2026-09-20 为 18 个文件、329 项，其中 `ui-mms` 6 个文件、152 项） | 只测组件和 node 半边的搜索进程；不测 client↔host 的实际接线，那条只有真实实例能证明（2026-09-20 抓到过三次：安装器不刷新 node 半边、typert manifest 未注册、cordis 的 `remote.<ns>` 必须显式 inject） |
+| O3 | C14.01/.02/.03、C12、C15 | vitest 跑自有覆盖包 `packages/client/ui-mms`，外加它所覆盖的三个上游包（原样未改）的测试 | 全过（2026-09-20 为 20 个文件、354 项，其中 `ui-mms` 8 个文件、177 项） | 只测组件和 node 半边的搜索进程；不测 client↔host 的实际接线，那条只有真实实例能证明（2026-09-20 抓到过三次：安装器不刷新 node 半边、typert manifest 未注册、cordis 的 `remote.<ns>` 必须显式 inject） |
 | O6 | C07.01–.04 | `mms/adapter/test_remote.mjs`：真实 socket + 替身 DSH | 14 项全过：执行 `/remote rotate` 的那个设备拿到新 cookie、其他设备立即失效；无口令 / 非法 Host / 跨源 / 旧口令被拒且不到达 DSH；WebSocket 需要 cookie；DSH cookie 不外泄；只有 manifest 和 icon 不需要口令；扫码页只对本机 + 有效 nonce；`/remote` 输出不含口令 | 不测真实手机，也不测 LAN 绑定（绑定见 `REMOTE.md` 端到端记录） |
 | O12 | C07.01/.05 | `mms/adapter/test_service.py` | 7 项全过：`remote tunnel` 只服务已登记域名、不宣告任何局域网地址；`remote on` 两者都开；关闭时已登记的域名仍在并说明怎么开；Tailscale 的 `100.64/10` 不被标成局域网（边界 `100.63` / `100.128` 反向验证）；`add-host` 只收域名本身 | 不证明隧道真的连得通，那条只有真实域名 + 手机能证明 |
 | O7 | C13.03 | `mms/adapter/test_stop.mjs` | 5 项全过：用户停止先 kill 本 agent 仍在跑的 job 再照常取消；其他原因的取消不 kill；kill 失败不挡停止；不重复包装 | 不证明上游仍调用 `agent.cancel({kind:'user'})`，那条由 L5 兜底 |

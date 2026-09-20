@@ -307,6 +307,9 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
         # at a lower slot priority; upstream occupants stay loaded underneath.
         # The package is outside dsh's dependency closure, so the row names its
         # file; the host takes the client manifest from the nearest package.json.
-        patch.append({'insert': [{'id': 'mms-ui', 'name': str(ui_overlay / 'lib/index.js')}]})
+        # The node half drives remote access for the Settings switch, so it is
+        # told which installation it belongs to — the same root `/remote` uses.
+        patch.append({'insert': [{'id': 'mms-ui', 'name': str(ui_overlay / 'lib/index.js'),
+                                  'config': {'installation': str(instance.parent)}}]})
     private_json(instance / 'mms.patch.yml', patch)
     return metadata

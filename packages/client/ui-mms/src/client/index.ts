@@ -26,15 +26,19 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // The node half's `mmsProjects` Remote namespace (self-reference to this
 // package's generated remote face): the import carries both the declaration
 // merge and the contribution value mounted below.
 import mmsProjectsRemote from '@deepseek-ai/dsh-client-ui-mms/remote'
+import type { RemoteAccessState, RemoteMode } from '@deepseek-ai/dsh-client-ui-mms/types'
 import { MmsBrandName } from './Brand.tsx'
 import { BrowseDirectoryFlow, type BrowseFlowInjected } from './flow.ts'
 import { ModelSelect, type MmsModelSeatInjected } from './ModelSelect.tsx'
 import { en as modelEn, zh as modelZh, type ModelKey } from './model-locales.ts'
 import { en as mmsEn, zh as mmsZh, projectsEn, projectsZh, type MmsKey } from './locales.ts'
+import { RemoteAccess, type RemoteAccessInjected } from './RemoteAccess.tsx'
+import { en as remoteEn, zh as remoteZh, type RemoteKey } from './remote-locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -42,6 +46,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     mms: MmsKey
     /** The model seat's copy: upstream's model keys plus search and effort. */
     'mms-model': ModelKey
+    /** The remote-access settings row's copy. */
+    'mms-remote': RemoteKey
   }
 }
 
@@ -52,6 +58,7 @@ const NS = 'mms'
 /** The dialog's namespace stays undeclared so its `t` is the plain Translate the dialog takes. */
 const PROJECTS_NS = 'mms-projects'
 const MODEL_NS = 'mms-model'
+const REMOTE_NS = 'mms-remote'
 const FLOW_HOLES = ['conversation.hero.workspace.directoryFlow', 'sidebar.workspaces.directoryFlow'] as const
 
 /** Required services; `modelDirectories` is waited on only by the model seat. */
@@ -73,6 +80,7 @@ const MODEL_SEAT_INJECT = ['slots', 'modelDirectories', 'sessions', 'remote', 'r
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh: mmsZh, en: mmsEn }), 'ui-mms: dictionaries')
   ctx.effect(() => ctx.locale.register(MODEL_NS, { zh: modelZh, en: modelEn }), 'ui-mms: model dictionaries')
+  ctx.effect(() => ctx.locale.register(REMOTE_NS, { zh: remoteZh, en: remoteEn }), 'ui-mms: remote dictionaries')
   ctx.effect(() => {
     // Untyped per-locale form (the namespace is outside the merge table); the
     // pair lands as a unit so a rival owner cannot leave one locale squatted.
@@ -100,6 +108,9 @@ export function apply(ctx: ClientContext): void {
   // until the namespace is live — a Host without `remote` still gets the
   // brand, the model seat and the folder dialog's other paths.
   const rankProjects: { call: BrowseFlowInjected['searchProjects'] } = { call: async () => [] }
+  // Same shape for the settings switch: empty until the namespace is live,
+  // and the row draws nothing rather than offering a dead control.
+  const remoteAccess: RemoteAccessInjected = { load: async () => null, setMode: async () => null }
   ctx.inject(['remote'], (scope: ClientContext) => {
     scope.effect(() => {
       let dispose: (() => Promise<void>) | undefined
@@ -147,6 +158,38 @@ export function apply(ctx: ClientContext): void {
       return () => { rankProjects.call = previous }
     }, 'ui-mms: project search call')
   })
+
+  ctx.inject(['remote', 'remote.mmsRemote'], (ready: ClientContext) => {
+    ready.effect(() => {
+      const previous = { ...remoteAccess }
+      const answer = async (run: () => Promise<{ ok: true; value: RemoteAccessState } | { ok: false; error: unknown }>) => {
+        try {
+          const result = await run()
+          if (result.ok) return result.value
+          console.error('[mms] remote access call failed:', result.error)
+          return null
+        } catch (error: unknown) {
+          console.error('[mms] remote access call threw:', error)
+          return null
+        }
+      }
+      remoteAccess.load = () => answer(() => ready.remote.mmsRemote.status())
+      remoteAccess.setMode = (mode: RemoteMode) => answer(() => ready.remote.mmsRemote.setMode(mode))
+      return () => { Object.assign(remoteAccess, previous) }
+    }, 'ui-mms: remote access call')
+  })
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'mms-remote-access',
+    // After the upstream rows: this one is about the machine, not the editor.
+    order: 60,
+    locale: REMOTE_NS,
+    inject: (): RemoteAccessInjected => ({
+      load: () => remoteAccess.load(),
+      setMode: mode => remoteAccess.setMode(mode),
+    }),
+  }, RemoteAccess))
 
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({
     name: 'sidebar.brand.name', priority: PRIORITY, locale: NS,

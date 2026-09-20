@@ -1,8 +1,9 @@
 /**
  * MMS Harness UI plugin, node half. Besides giving Loader a host-side row for
  * the browser half shipped through `exports["./client"]`, it owns the one Host
- * capability this overlay needs and upstream has no seam for: ranking project
- * folders for the folder dialog's search box (`ctx.remote.mmsProjects`).
+ * capabilities this overlay needs and upstream has no seam for: ranking
+ * project folders for the folder dialog's search box (`ctx.remote.mmsProjects`)
+ * and driving remote access from Settings (`ctx.remote.mmsRemote`).
  */
 
 import { Context } from '@deepseek-ai/cordis'
@@ -11,8 +12,11 @@ import { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import type { TypertContribution } from '@deepseek-ai/dsh-typert-registry/types'
 import { MmsProjectSearchController } from './projects.ts'
+import { MmsRemoteAccessController, type Config } from './remote-access.ts'
 
 export { MmsProjectSearchController } from './projects.ts'
+export { MmsRemoteAccessController } from './remote-access.ts'
+export type { Config } from './remote-access.ts'
 
 /**
  * Host plugin body.
@@ -26,10 +30,12 @@ export { MmsProjectSearchController } from './projects.ts'
  *
  * Both steps are scoped and failure-tolerant: a Host without `typert` still
  * gets the overlay's brand, model seat and folder dialog.
- * @param ctx - Host context the project-search namespace registers on.
+ * @param ctx - Host context these namespaces register on.
+ * @param config - the installation the remote-access switch drives.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = {}): void {
   ctx.plugin(MmsProjectSearchController)
+  ctx.plugin(MmsRemoteAccessController, config)
   ctx.inject(['typert'], (scope: Context) => {
     scope.effect(() => {
       let dispose: (() => void) | undefined
@@ -39,7 +45,7 @@ export function apply(ctx: Context): void {
       void (import('@deepseek-ai/dsh-client-ui-mms/typert') as Promise<{ TYPERT: TypertContribution }>).then((face) => {
         if (disposed) return
         dispose = scope.typert.register(face.TYPERT)
-      }).catch(() => { /* the folder search degrades to added projects */ })
+      }).catch(() => { /* the folder search and the remote switch degrade to absent */ })
       return () => {
         disposed = true
         dispose?.()
