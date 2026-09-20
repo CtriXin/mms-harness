@@ -231,15 +231,21 @@ def private_json(path: Path, value):
     temporary.replace(path)
 
 
-def seed_default_selection(path: Path, selection: dict, known_providers=()):
+def seed_default_selection(path: Path, selection: dict, known_providers=(), routes=()):
     """Give dsh the MMS default model and effort, and keep it pointing at a real face.
 
     `reasoningEffort` exists only in dsh's settings layer, and the
     agent-default-model config silently ignores it. A selection the user has
-    already saved is normally left untouched — but a provider id that no longer
-    exists is not a preference, it is a dangling reference: regrouping the
-    routes into wire faces changed every id, and a default naming a face that
-    is gone leaves new sessions with no model at all. That one is repaired.
+    already saved is left untouched — but a provider id that no longer exists
+    is not a preference, it is a dangling reference: regrouping the routes into
+    wire faces changed every id, and a default naming a face that is gone
+    leaves new sessions with no model at all.
+
+    Repairing it re-points the SAME model at whichever face now serves it best,
+    keeping the model and the effort the operator chose. Replacing the whole
+    selection would answer "your provider id is stale" by silently changing
+    which model they start sessions with. Only a model that is itself gone
+    falls back to the MMS default.
 
     Only the default is ever rewritten. The session transcripts name the
     provider that actually served each past turn, and rewriting those to say
@@ -253,6 +259,14 @@ def seed_default_selection(path: Path, selection: dict, known_providers=()):
         provider = re.search(r'^\s+provider\s*:\s*"?([\w-]+)"?', saved.group(1), re.M)
         if provider is None or provider.group(1) in set(known_providers):
             return
+        model = re.search(r'^\s+model\s*:\s*"?([^"\n]+)"?', saved.group(1), re.M)
+        effort = re.search(r'^\s+reasoningEffort\s*:\s*"?([\w-]+)"?', saved.group(1), re.M)
+        kept = model and next((r for r in sorted(routes, key=lambda r: r['rank'])
+                               if r['model'] == model.group(1).strip()), None)
+        if kept is not None:
+            selection = {'provider': kept['provider'], 'model': kept['model']}
+            if effort is not None:
+                selection['reasoningEffort'] = effort.group(1)
         text = text[:saved.start()] + text[saved.end():]
     block = 'agent-default-model:\n' + ''.join(f'  {k}: {json.dumps(v)}\n' for k, v in selection.items())
     path.write_text(text + ('' if not text or text.endswith('\n') else '\n') + block)
@@ -323,7 +337,7 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
     preference = data['providers'][choice['provider']].get('reasoning')
     if preference:
         selection['reasoningEffort'] = preference
-    seed_default_selection(dsh_home / 'settings.yaml', selection, data['providers'])
+    seed_default_selection(dsh_home / 'settings.yaml', selection, data['providers'], data['routes'])
     patch = [
         {'id': 'llm-pi-ai', 'config': {'providers': data['providers']}},
         {'id': 'llm-deepseek', 'disabled': True},

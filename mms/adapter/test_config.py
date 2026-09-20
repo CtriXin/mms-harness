@@ -179,13 +179,21 @@ def test_mms_effort_preference_reaches_dsh_settings_once(tmp_path):
     # One that no longer resolves is a dangling reference, not a preference:
     # regrouping the routes into wire faces changed every provider id, and a
     # default naming a face that is gone leaves new sessions with no model.
-    stale=user.replace(live,'mms-000000000000')
+    # The repair re-points the SAME model and keeps the chosen effort: a stale
+    # provider id must not silently change which model new sessions start with.
+    stale=user.replace(live,'mms-000000000000').replace('model: picked','model: upstream-alias')
     (instance/'home/settings.yaml').write_text(stale)
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
     repaired=(instance/'home/settings.yaml').read_text()
     assert 'mms-000000000000' not in repaired and f'provider: "{live}"' in repaired
+    assert 'model: "upstream-alias"' in repaired and 'reasoningEffort: "low"' in repaired
     # Everything else in the document survives the repair.
     assert 'welcomeNoticeVersion: x' in repaired
+    # Only a model that is itself gone falls back to the MMS default.
+    (instance/'home/settings.yaml').write_text(stale.replace('model: upstream-alias','model: retired-model'))
+    configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
+    reset=(instance/'home/settings.yaml').read_text()
+    assert 'retired-model' not in reset and 'model: "upstream-alias"' in reset and 'reasoningEffort: "high"' in reset
     other='ui-onboarding:\n  welcomeNoticeVersion: x\n'
     (instance/'home/settings.yaml').write_text(other)
     configure(root,instance,'deepseek-test',previous_credentials=json.loads((instance/'home/.credentials.yaml').read_text()))
