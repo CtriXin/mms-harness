@@ -36,8 +36,14 @@ declare module '@deepseek-ai/cordis' {
 
 /** Where this plugin finds the installation it drives. */
 export interface Config {
-  /** Installation root: the directory holding `installation.json`. */
-  installation?: string
+  /**
+   * Installation root: the directory holding `installation.json`.
+   *
+   * Spelled `| undefined` because the Loader row may carry no config at all,
+   * and `exactOptionalPropertyTypes` distinguishes an absent key from a
+   * present one holding `undefined`. Both mean the same thing here.
+   */
+  installation?: string | undefined
 }
 
 /** Modes the switch may ask for, and the `service.py` action that sets each. */

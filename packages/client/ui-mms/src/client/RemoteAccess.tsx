@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RemoteAccessState, RemoteLink, RemoteMode } from '@deepseek-ai/dsh-client-ui-mms/types'
 import type { RemoteKey } from './remote-locales.ts'
@@ -29,9 +29,14 @@ export interface RemoteAccessInjected {
   setMode: (mode: RemoteMode) => Promise<RemoteAccessState | null>
 }
 
-/** Full component props: runtime share + locale seat + injected face. */
-export type RemoteAccessProps =
-  PropsRuntime<'settings.general.item'> & PropsLocale<'mms-remote'> & RemoteAccessInjected
+/**
+ * Component props: the locale seat plus the injected face.
+ *
+ * The General item slot supplies no owner props, and the standard runtime
+ * hooks are not used here, so they are not declared — the same shape the
+ * model seat in this package uses.
+ */
+export type RemoteAccessProps = PropsLocale<'mms-remote'> & RemoteAccessInjected
 
 /** The three states, in the order they widen what is reachable. */
 const MODES: readonly { id: RemoteMode; labelKey: RemoteKey; hintKey: RemoteKey }[] = [

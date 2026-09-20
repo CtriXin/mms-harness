@@ -19,7 +19,7 @@ function state(over: Partial<RemoteAccessState> = {}): RemoteAccessState {
 
 function draw(initial: RemoteAccessState | null, setMode = vi.fn(async () => initial)) {
   const load = vi.fn(async () => initial)
-  render(<RemoteAccess t={t} load={load} setMode={setMode as never} {...({} as never)} />)
+  render(<RemoteAccess t={t} load={load} setMode={setMode as never} />)
   return { load, setMode }
 }
 
