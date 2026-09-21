@@ -549,3 +549,64 @@ describe('recorded provider listings', () => {
     await expect(ctx.llm.discoverModels('llm-pi-ai', { baseURL: server.url, api })).resolves.toEqual(models)
   })
 })
+
+describe('configured-route model discovery', () => {
+  /** A route whose endpoint and protocol come from plugin config, not settings. */
+  async function configured(server: ListingServer, api: string): Promise<Context> {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    process.env['CONFIGURED_KEY'] = 'stored-key'
+    touchedEnv.push('CONFIGURED_KEY')
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'mms-face': { apiKeyEnv: 'CONFIGURED_KEY', api, baseURL: server.url, models: [{ id: 'seeded' }] },
+      },
+    })
+    return ctx
+  }
+
+  it('interrogates the endpoint the route is configured with when the draft names none', async () => {
+    // The Models form draws an inherited address as a placeholder and sends an
+    // empty field, so refusing here withheld the action from every route whose
+    // endpoint arrives through configuration rather than the settings document.
+    const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'served' }] }) })
+    const ctx = await configured(server, 'openai-completions')
+
+    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'mms-face' }))
+      .resolves.toEqual([{ id: 'served', name: 'served' }])
+    expect(server.paths).toEqual(['/models'])
+    expect(server.headers[0]?.authorization).toBe('Bearer stored-key')
+  })
+
+  it('inherits the configured protocol, not the OpenAI Chat default', async () => {
+    // Asked as `openai-completions` this would GET /models with a bearer; the
+    // Anthropic route lists elsewhere and authenticates with another header,
+    // so a wrong default reaches the wrong URL and reads as a bad key.
+    const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'claude-x' }] }) })
+    const ctx = await configured(server, 'anthropic-messages')
+
+    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'mms-face' })
+    expect(server.paths[0]?.startsWith('/v1/models')).toBe(true)
+    expect(server.headers[0]?.['x-api-key']).toBe('stored-key')
+    expect(server.headers[0]?.authorization).toBeUndefined()
+  })
+
+  it('lets an address typed into the form win over the configured one', async () => {
+    const configuredServer = await listingServer({ body: JSON.stringify({ data: [{ id: 'old' }] }) })
+    const typedServer = await listingServer({ body: JSON.stringify({ data: [{ id: 'new' }] }) })
+    const ctx = await configured(configuredServer, 'openai-completions')
+
+    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'mms-face', baseURL: typedServer.url }))
+      .resolves.toEqual([{ id: 'new', name: 'new' }])
+    // The point of typing an address is to probe it; the stored one is not consulted.
+    expect(configuredServer.paths).toEqual([])
+  })
+
+  it('still refuses a route that names no endpoint anywhere', async () => {
+    // The original diagnostic has to survive: inheriting an absent value is
+    // not the same as inventing one.
+    const ctx = await harness()
+    await expect(ctx.llm.discoverModels('llm-pi-ai', { provider: 'never-configured' }))
+      .rejects.toThrow(/set a baseURL/)
+  })
+})

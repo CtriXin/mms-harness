@@ -254,14 +254,27 @@ export interface StoredModelDiscoveryProfile {
   readonly headers: Readonly<Record<string, string>> | undefined
   /** Resolve the named route's credential only when the draft carries none. */
   readonly resolveApiKey: () => Promise<string | undefined>
+  /**
+   * The configured route's endpoint, for a draft that never typed one.
+   *
+   * A route whose endpoint comes from the plugin's own config rather than the
+   * settings document leaves the form's address field empty: the value is
+   * inherited and drawn only as a placeholder. The draft then carries no
+   * `baseURL`, and this action used to refuse an endpoint the Host was holding
+   * all along — the same reason the credential and headers are supplied here.
+   */
+  readonly baseURL?: string | undefined
+  /** The configured route's protocol, inherited for the same reason as {@link baseURL}. */
+  readonly api?: string | undefined
 }
 
 /**
  * Interrogate one draft provider endpoint for the models it advertises.
  * @param request - the endpoint, protocol, and one-shot credential to use.
- * @param storedProfile - Host-owned headers and lazy credential resolution for
- *   the named route. It is read only on the path that reaches the network; the
- *   credential is resolved only when the draft carries none.
+ * @param storedProfile - Host-owned endpoint, protocol, headers and lazy
+ *   credential resolution for the named route, each used only where the draft
+ *   supplies nothing. It is read past the catalog check; the credential is
+ *   resolved only when the draft carries none.
  * @returns the advertised models in endpoint order.
  * @throws LlmError when the protocol has no readable listing, the endpoint
  *   refuses or fails the request, or the reply is not a model listing.
@@ -284,7 +297,15 @@ export async function discoverModels(
       }))
     }
   }
-  if (request.baseURL === undefined || request.baseURL.length === 0) {
+  // Read past the catalog check and before the endpoint and protocol ones, so
+  // a route whose address is configured rather than typed can be interrogated
+  // at all. Only the object is taken here; `resolveApiKey` stays lazy below so
+  // a key typed into the form is never made to lose to the stored one.
+  const stored = storedProfile?.()
+  const baseURL = request.baseURL === undefined || request.baseURL.length === 0
+    ? stored?.baseURL
+    : request.baseURL
+  if (baseURL === undefined || baseURL.length === 0) {
     throw new LlmError(
       `pi-ai ships no catalog for provider "${request.provider ?? ''}", so its models can only come from its`
       + " endpoint; set a baseURL, or enter this provider's models by hand",
@@ -297,20 +318,18 @@ export async function discoverModels(
   // the action from the case it exists for. The cost is a misdirected message
   // when the endpoint speaks something else (an Anthropic gateway answers 401,
   // which reads as a credential problem), and hand-entry remains the way out.
-  const api = request.api ?? 'openai-completions'
+  const api = request.api ?? stored?.api ?? 'openai-completions'
   if (!LISTABLE_PROTOCOLS.has(api)) {
     throw new LlmError(
       `pi-ai protocol "${api}" has no model listing this build can read; enter this provider's models by hand`,
       'DISCOVERY_UNSUPPORTED',
     )
   }
-  const url = listingUrl(request.baseURL, api)
+  const url = listingUrl(baseURL, api)
   // A key typed into the form wins: it may replace the stored key that is
-  // failing. The stored profile is asked past the catalog and protocol checks,
-  // and its credential resolver remains lazy so a typed key cannot fail over a
-  // stored credential it supersedes. A route may still authenticate through a
-  // deployment-owned Authorization header when neither key exists.
-  const stored = storedProfile?.()
+  // failing. The resolver is awaited only here, so a typed key cannot fail
+  // over a stored credential it supersedes. A route may still authenticate
+  // through a deployment-owned Authorization header when neither key exists.
   const supplied = request.apiKey ?? await stored?.resolveApiKey()
   const apiKey = supplied === undefined ? undefined : usableProbeKey(supplied)
   let response: Response

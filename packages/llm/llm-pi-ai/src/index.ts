@@ -249,6 +249,11 @@ export function apply(ctx: Context, config: Config): void {
     return {
       headers: profile.headers,
       resolveApiKey: () => resolveApiKey(provider, profile),
+      // The address and protocol a draft leaves empty because it inherits
+      // them. Without these a route configured outside the settings document
+      // — its fields drawn as placeholders — could never be interrogated.
+      ...profile.baseURL === undefined ? {} : { baseURL: profile.baseURL },
+      ...profile.api === undefined ? {} : { api: profile.api },
     }
   }
   // Interrogating an endpoint is a configuration-time action over a draft, so
