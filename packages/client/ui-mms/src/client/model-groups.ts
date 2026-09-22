@@ -59,14 +59,19 @@ export interface ModelFamily {
  * The first segment is the vendor-ish part (`MiniMax-M3` -> `MiniMax`,
  * `deepseek-v4-flash` -> `deepseek`). A trailing generation digit is dropped
  * so `qwen3-max` and `qwen-plus` land together — but only when what remains is
- * still a word, which keeps a short name like `k3` intact instead of
- * collapsing it to `k`.
+ * still a word (so `k3` would not collapse to `k`). Explicit aliases map
+ * `k3` → `kimi` and `codex*` → `gpt` for the Ops model seat.
  * @param modelName - the model's display name.
  * @returns the family label.
  */
 export function familyLabelOf(modelName: string): string {
-  const head = modelName.trim().split(/[-_/\s.]/)[0] ?? ''
-  if (head === '') return modelName.trim()
+  const raw = modelName.trim()
+  const lower = raw.toLowerCase()
+  // Fold short/vendor aliases into the parent family (Ops seat readability).
+  if (lower === 'k3' || lower.startsWith('k3-') || lower.startsWith('k3_')) return 'kimi'
+  if (lower.startsWith('codex')) return 'gpt'
+  const head = raw.split(/[-_/\s.]/)[0] ?? ''
+  if (head === '') return raw
   const withoutGeneration = head.replace(/\d+$/, '')
   return withoutGeneration.length >= 3 ? withoutGeneration : head
 }

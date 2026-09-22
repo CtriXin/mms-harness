@@ -31,8 +31,13 @@ describe('familyLabelOf', () => {
   it('folds a generation digit into its family, but not away to a single letter', () => {
     expect(familyLabelOf('qwen3-max')).toBe(familyLabelOf('qwen-plus'))
     expect(familyLabelOf('qwen3-max')).toBe('qwen')
-    // `k3` must stay `k3`: stripping the digit would file it under `k`.
-    expect(familyLabelOf('k3')).toBe('k3')
+  })
+
+  it('maps short Ops aliases into their parent families', () => {
+    expect(familyLabelOf('k3')).toBe('kimi')
+    expect(familyLabelOf('k3-fast')).toBe('kimi')
+    expect(familyLabelOf('codex')).toBe('gpt')
+    expect(familyLabelOf('codex-mini')).toBe('gpt')
   })
 })
 
