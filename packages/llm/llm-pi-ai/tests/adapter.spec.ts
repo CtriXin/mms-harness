@@ -152,6 +152,64 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.requests[0]).not.toHaveProperty('dsh_plugin_packages')
   })
 
+  it('gives each model on one route its own default effort, falling back to the route\'s', async () => {
+    // The reason this exists: reasoning depth belongs to the model, not to the
+    // endpoint. Without it, a deployment whose models want different defaults
+    // had to declare the same endpoint and credential once per level, and a
+    // settings page showed one channel as three.
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+    const ctx = await harness(server.url, {
+      reasoning: 'max',
+      models: [{ id: 'deepseek-v4-pro', reasoning: 'off' }, { id: 'deepseek-v4-flash' }],
+    })
+
+    await assemble(ctx, { model: 'deepseek-v4-pro', messages: [] })
+    expect(server.requests[0]).toMatchObject({ thinking: { type: 'disabled' } })
+    expect(server.requests[0]).not.toHaveProperty('reasoning_effort')
+
+    // No level of its own, so the route's still answers.
+    await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(server.requests[1]).toMatchObject({ reasoning_effort: 'max' })
+  })
+
+  it('applies the model\'s own default when the caller names no effort at all', async () => {
+    // The seam resolves model info first and passes the level it found, so the
+    // route-level fallback is all a caller reaching the adapter directly would
+    // otherwise get. Driven here without that seam, which is the only way this
+    // branch is observable.
+    const server = await mockServer([{ events: textEvents }])
+    vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const adapter = adapterOf({
+      deepseek: {
+        apiKeyEnv: 'PI_TEST_KEY',
+        baseURL: server.url,
+        reasoning: 'max',
+        models: [{ id: 'deepseek-v4-flash', reasoning: 'off' }],
+      },
+    })
+    for await (const _chunk of adapter.stream({
+      provider: 'deepseek', model: 'deepseek-v4-flash', messages: [],
+    })) { /* drain */ }
+
+    expect(server.requests[0]).toMatchObject({ thinking: { type: 'disabled' } })
+    expect(server.requests[0]).not.toHaveProperty('reasoning_effort')
+  })
+
+  it('lets the request name an effort over the model\'s own default', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, {
+      reasoning: 'max',
+      models: [{ id: 'deepseek-v4-flash', reasoning: 'off' }],
+    })
+
+    await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      reasoningEffort: ReasoningEffortId('high'),
+      messages: [],
+    })
+    expect(server.requests[0]).toMatchObject({ reasoning_effort: 'high' })
+  })
+
   it('uses a dynamic request effort and reports unsupported efforts before network I/O', async () => {
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])
     const ctx = await harness(server.url, { reasoning: 'max' })

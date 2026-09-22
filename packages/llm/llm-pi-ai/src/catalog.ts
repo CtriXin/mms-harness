@@ -605,6 +605,18 @@ export interface PiAiModelProfile {
    * declares the offered levels and their wire spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
+  /**
+   * The level a request naming none gets for this model, winning over the
+   * route's own `reasoning`.
+   *
+   * Reasoning depth is a property of the model, not of the endpoint it is
+   * reached through: one gateway commonly serves a model that should think as
+   * hard as it can beside one that should not think at all. With the default
+   * expressible only on the route, a deployment that wanted both had to
+   * declare the same endpoint and credential once per level, and a settings
+   * page showed one channel as three.
+   */
+  reasoning?: ModelThinkingLevel
   /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
   compat?: PiAiCompatProfile
 }
@@ -814,6 +826,11 @@ export interface RouteCatalog {
    * picked, so only an explicit configuration lands here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /**
+   * Default reasoning levels this profile configured per model, by model id.
+   * A model absent here falls back to the route's own `reasoning`.
+   */
+  configuredReasoning: ReadonlyMap<string, ModelThinkingLevel>
 }
 
 /**
@@ -879,6 +896,7 @@ export function resolveRouteModels(
   assertOfferedCompatFields(provider, 'route', request.compat)
   const seen = new Set<string>()
   const configuredMaxTokens = new Map<string, number>()
+  const configuredReasoning = new Map<string, ModelThinkingLevel>()
   const resolveEntry = (entry: PiAiModelProfile): Model<Api> => {
     assertOfferedCompatFields(provider, `model "${entry.id}"`, entry.compat)
     if (entry.id.length === 0) invalid(provider, 'has a model with an empty id')
@@ -909,6 +927,10 @@ export function resolveRouteModels(
     // Only a value the profile named is a deployment choice; the catalog's is
     // the model's capability and stays out of request defaults.
     if (entry.maxTokens !== undefined) configuredMaxTokens.set(entry.id, entry.maxTokens)
+    // Same rule as the cap above: only a level the profile named is a
+    // deployment choice. The route's own `reasoning` stays the fallback and is
+    // not copied per model, so clearing it still clears every model with it.
+    if (entry.reasoning !== undefined) configuredReasoning.set(entry.id, entry.reasoning)
     return {
       // The installed entry lays the floor, and the fields below override it.
       // Enumerating instead would silently drop every `Model` field this
@@ -953,5 +975,5 @@ export function resolveRouteModels(
     invalid(provider, `sets compat "${field}", but no model on the route speaks a protocol that takes it;`
       + ` it exists on ${takers.join(', ')}`)
   }
-  return { models: serviceableModels, configuredMaxTokens, modelErrors }
+  return { models: serviceableModels, configuredMaxTokens, configuredReasoning, modelErrors }
 }

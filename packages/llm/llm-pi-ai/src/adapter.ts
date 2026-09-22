@@ -300,7 +300,13 @@ export class PiAiAdapter extends LlmAdapter {
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
-    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    // The model's own configured default wins over the route's, so one route
+    // can serve a model that should think as hard as it can beside one that
+    // should not think at all.
+    const defaultLevel = describableReasoningLevel(
+      resolvedModel,
+      profile.configuredReasoning.get(model) ?? profile.reasoning,
+    )
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
@@ -343,7 +349,9 @@ export class PiAiAdapter extends LlmAdapter {
     const model = this.modelOf(snapshot, options.provider, options.model)
     const reasoning = resolveReasoningLevel(
       model,
-      options.reasoningEffort ?? profile.reasoning,
+      // A level the request names wins; otherwise this model's own default,
+      // then the route's.
+      options.reasoningEffort ?? profile.configuredReasoning.get(options.model) ?? profile.reasoning,
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 

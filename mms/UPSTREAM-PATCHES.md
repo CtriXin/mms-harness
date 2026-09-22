@@ -7,7 +7,7 @@
 
 首次登记于 2026-09-18，当时共 25 处。2026-09-19 起，界面相关的改动已挪进自有包 `packages/client/ui-mms`：它用 slot 优先级 `-10` 覆盖上游的组件，上游原来的组件仍然加载在下面。原来改过的 20 个上游文件，包括共享的 locale、`ui-model-selection`、`ui-directory-picker-browse`、sidebar 测试和快照，都已还原为上游原版，见 `packages/client/ui-mms/README.zh.md`。2026-09-20 又多了一行 `tsconfig.host.json`：`ui-mms` 从纯 client 包变成了双 face 包，它的 node 半边持有 `mmsProjects` Remote namespace。
 
-剩下的 11 处里，前 8 处是上游没有扩展点、必须保留的改动。最后 3 处（`llm-pi-ai`）不一样：那是一个上游缺陷的修复，不含任何 fork 专属语义，应当回推上游；回推被接受后这三行就该删掉。
+前 8 处是上游没有扩展点、必须保留的改动。后面的 `llm-pi-ai` 行不一样：它们修的是上游行为，不含 fork 专属语义，应当回推上游；回推被接受后对应的行就该删掉。
 
 | 文件 | 能力项 | 为什么改 | 状态 | 冲突时怎么办 |
 |---|---|---|---|---|
@@ -22,5 +22,9 @@
 | `packages/llm/llm-pi-ai/src/discovery.ts` | C01.11 | 「获取可用模型」只认请求里带的 `baseURL`，从不回落到路由已配置的端点。而表单把继承来的地址画成占位符、发空值，于是凡是端点来自插件 config 而非 settings 文档的路由，这个动作一概被拒。让 `StoredModelDiscoveryProfile` 也带上 `baseURL` 和 `api`，草稿没填时才用 | 待回推上游 | 上游若已修则取上游版本；否则取上游版本后重做这一处，看 `tests/discovery.spec.ts` 的 `configured-route model discovery` |
 | `packages/llm/llm-pi-ai/src/index.ts` | C01.11 | 同上的另一半：`storedDiscoveryProfile` 把已解析路由的 `baseURL`/`api` 供出去 | 待回推上游 | 同上 |
 | `packages/llm/llm-pi-ai/tests/discovery.spec.ts` | C01.11 | 上面那条的四个测试（继承端点、继承协议、手填优先、未配置仍拒绝），四条变异全部可红 | 待回推上游 | 同上 |
+| `packages/llm/llm-pi-ai/src/catalog.ts` | C02 | 模型条目增加 `reasoning`：这个模型自己的默认 effort，缺省时回落到通道。dsh 原先只能把默认 effort 挂在 provider 上 | 待回推上游 | 上游若已有 per-model 默认档则取上游版本；否则取上游版本后重做，看 `tests/adapter.spec.ts` |
+| `packages/llm/llm-pi-ai/src/config.ts` | C02 | schema 接受模型上的 `reasoning`，并把它收进 `configuredReasoning` | 待回推上游 | 同上 |
+| `packages/llm/llm-pi-ai/src/adapter.ts` | C02 | 模型信息和请求路径都先用模型自己的默认档，再回落到通道 | 待回推上游 | 同上 |
+| `packages/llm/llm-pi-ai/tests/adapter.spec.ts` | C02 | 覆盖模型默认档：描述、请求，以及绕过 LLM seam 直接驱动 adapter 的那条 | 待回推上游 | 同上 |
 
 `packages/client/ui-mms/` 是新增目录，不算上游文件，O4 不登记它。它的 `ModelSelect.tsx` 和 `DirectoryBrowser.tsx` 是上游组件的副本，同步上游时要对照原版，方法见该包 README 的「与上游保持同步」一节。
