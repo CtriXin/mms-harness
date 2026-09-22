@@ -150,9 +150,14 @@ def convert_bundle(bundle):
                 # each. The model field removes the only reason to split.
                 if default_effort is not None:
                     model['reasoning'] = default_effort
-                # See the note above: everything in this key changes what the
-                # wire does, so two routes that agree on all of it are one face.
-                face = (provider, endpoint, protocol)
+                # The channel and the protocol NAME the face; the endpoint is
+                # something the face has, not part of who it is. Hashing the
+                # endpoint in made the id change whenever MMS moved a gateway,
+                # and every id that changes orphans the model every open
+                # session saved — the seat then draws a raw `mms-…` string and
+                # loses the effort with it. A channel serves one endpoint per
+                # protocol, so dropping it from the key merges nothing extra.
+                face = (provider, protocol)
                 digest = hashlib.sha256('\0'.join(str(part) for part in face).encode()).hexdigest()[:12]
                 route_id = 'mms-' + digest
                 reference = 'MMS_DSH_' + digest.upper()
@@ -209,7 +214,57 @@ def name_faces(providers, faces):
         if len(members) == 1:
             continue
         for route_id in members:
-            providers[route_id]['displayName'] += ' · ' + PROTOCOLS[faces[route_id][2]]
+            providers[route_id]['displayName'] += ' · ' + PROTOCOLS[faces[route_id][1]]
+
+
+SESSION_SELECTIONS = Path('home/storages/session_projcache/sessions')
+
+
+def repair_session_selections(instance: Path, providers, routes):
+    """Re-point a session's saved model at the channel that serves it now.
+
+    A provider id names a wire face, so it changes whenever the face does —
+    and every open session stores its own `{provider, model}` that nothing
+    rewrites. An id that moved leaves that session's seat drawing the raw
+    `mms-…` string with the reasoning level dropped beside it, on a channel
+    that no longer exists.
+
+    Only the provider is rewritten, and only when a live route still serves
+    the same wire id. Which model a session chose is the session's own
+    decision: a model that is simply gone is left naming what it named, so
+    the operator sees that it went rather than finding themselves quietly
+    moved onto a different one. This is repair of restorable state, not of
+    the transcript — no message, request or reply is touched.
+    @returns the number of session documents rewritten.
+    """
+    known = set(providers)
+    serving = {}
+    for route in sorted(routes, key=lambda r: r['rank']):
+        serving.setdefault(route['model'], route['provider'])
+    repaired = 0
+    for path in sorted((instance / SESSION_SELECTIONS).glob('session-*.json')):
+        try:
+            document = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue  # A store this cannot read is one it must not rewrite.
+        saved = document.get('record', {}).get('rows', {}).get('modelSelection', {})
+        value = saved.get('val') if isinstance(saved, dict) else None
+        if not isinstance(value, dict):
+            continue
+        changed = False
+        for slot in ('lastUsed', 'pending'):
+            chosen = value.get(slot)
+            if not isinstance(chosen, dict) or chosen.get('provider') in known:
+                continue
+            live = serving.get(chosen.get('model'))
+            if live is None:
+                continue
+            chosen['provider'] = live
+            changed = True
+        if changed:
+            private_json(path, document)
+            repaired += 1
+    return repaired
 
 
 def read_config(root):
@@ -339,6 +394,7 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
     if preference:
         selection['reasoningEffort'] = preference
     seed_default_selection(dsh_home / 'settings.yaml', selection, data['providers'], data['routes'])
+    repair_session_selections(instance, data['providers'], data['routes'])
     patch = [
         {'id': 'llm-pi-ai', 'config': {'providers': data['providers']}},
         {'id': 'llm-deepseek', 'disabled': True},

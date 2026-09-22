@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 import pytest
 sys.path.insert(0, str(Path(__file__).parent))
-from config import convert_bundle, configure, read_config, safe_url, shared_skill_dirs
+from config import (SESSION_SELECTIONS, convert_bundle, configure, read_config,
+                    repair_session_selections, safe_url, shared_skill_dirs)
 from run import launch_env
 from mms_consumer_bundle import EXPECTED_BUNDLE_FILES, ConsumerBundleError
 
@@ -334,8 +335,11 @@ def test_models_wanting_different_efforts_share_one_channel(tmp_path):
     assert 'reasoning' not in face
     assert {m['id']: m.get('reasoning') for m in face['models']} \
         == {'alpha-wire': 'high', 'beta-wire': 'max'}
-    # The settings page reads these off the route table, not off the provider
-    # card, so the number and the default have to travel with the route.
+    # Recorded on the route as well. Nothing reads these yet — the settings
+    # page draws the provider card, and `mmsCatalog.ranks()` takes only the
+    # model, the channel and the rank — so they are here for a surface that
+    # wants the resolved numbers without re-deriving them, not for one that
+    # already does.
     by_wire = {r['model']: r for r in out['routes']}
     assert by_wire['alpha-wire']['default_reasoning'] == 'high'
     assert by_wire['beta-wire']['default_reasoning'] == 'max'
@@ -354,3 +358,79 @@ def test_two_models_sharing_one_wire_id_on_a_face_are_refused(tmp_path):
     assert [m['name'] for m in list(out['providers'].values())[0]['models']] == ['alpha']
     assert [e['model'] for e in out['excluded']] == ['beta']
     assert 'wire id' in out['excluded'][0]['reason']
+
+
+def session_doc(tmp_path, name, value, extra=None):
+    """One session store document carrying a model selection and some history."""
+    folder = tmp_path / SESSION_SELECTIONS
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = {'modelSelection': {'val': value}}
+    rows.update(extra or {})
+    path = folder / f'session-{name}.json'
+    path.write_text(json.dumps({'version': 3, 'record': {'rows': rows}}))
+    return path
+
+
+def selection_of(path):
+    return json.loads(path.read_text())['record']['rows']['modelSelection']['val']
+
+
+ROUTES = [
+    {'model': 'glm-wire', 'provider': 'mms-live', 'rank': 0},
+    {'model': 'glm-wire', 'provider': 'mms-backup', 'rank': 1},
+]
+PROVIDERS = {'mms-live': {}, 'mms-backup': {}}
+
+
+def test_a_session_naming_a_dead_channel_is_repointed_at_the_live_one(tmp_path):
+    """A face id moves whenever the face does, and nothing else rewrites these."""
+    path = session_doc(tmp_path, 'a', {
+        'lastUsed': {'provider': 'mms-gone', 'model': 'glm-wire', 'reasoningEffort': 'max'},
+        'pending': {'provider': 'mms-alsogone', 'model': 'glm-wire'},
+    })
+    assert repair_session_selections(tmp_path, PROVIDERS, ROUTES) == 1
+    after = selection_of(path)
+    # Re-pointed at the primary, and the level the operator chose survives.
+    assert after['lastUsed'] == {'provider': 'mms-live', 'model': 'glm-wire', 'reasoningEffort': 'max'}
+    assert after['pending'] == {'provider': 'mms-live', 'model': 'glm-wire'}
+
+
+def test_a_live_channel_and_an_empty_slot_are_left_alone(tmp_path):
+    path = session_doc(tmp_path, 'b', {
+        'lastUsed': {'provider': 'mms-backup', 'model': 'glm-wire'},
+        'pending': None,
+    })
+    before = path.read_text()
+    assert repair_session_selections(tmp_path, PROVIDERS, ROUTES) == 0
+    # A fallback the operator picked is a live channel: re-pointing it at the
+    # primary would silently move them off the channel they chose.
+    assert path.read_text() == before
+
+
+def test_a_model_no_route_serves_keeps_naming_what_it_named(tmp_path):
+    """Which model a session chose is the session's own; absence is not a cue to change it."""
+    path = session_doc(tmp_path, 'c', {'lastUsed': {'provider': 'mms-gone', 'model': 'retired-wire'}, 'pending': None})
+    before = path.read_text()
+    assert repair_session_selections(tmp_path, PROVIDERS, ROUTES) == 0
+    assert path.read_text() == before
+
+
+def test_the_transcript_is_not_touched(tmp_path):
+    """Selection is restorable state; messages and requests are the record."""
+    history = {'messages': {'val': [{'role': 'assistant', 'provider': 'mms-gone', 'text': 'hi'}]},
+               'requests': {'val': [{'provider': 'mms-gone'}]}}
+    path = session_doc(tmp_path, 'd', {'lastUsed': {'provider': 'mms-gone', 'model': 'glm-wire'}, 'pending': None},
+                       extra=history)
+    repair_session_selections(tmp_path, PROVIDERS, ROUTES)
+    rows = json.loads(path.read_text())['record']['rows']
+    assert rows['messages']['val'] == history['messages']['val']
+    assert rows['requests']['val'] == history['requests']['val']
+
+
+def test_an_unreadable_or_absent_store_is_not_a_failure(tmp_path):
+    assert repair_session_selections(tmp_path, PROVIDERS, ROUTES) == 0
+    folder = tmp_path / SESSION_SELECTIONS
+    folder.mkdir(parents=True)
+    (folder / 'session-broken.json').write_text('{not json')
+    (folder / 'session-shapeless.json').write_text(json.dumps({'record': {'rows': {}}}))
+    assert repair_session_selections(tmp_path, PROVIDERS, ROUTES) == 0
