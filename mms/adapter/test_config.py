@@ -314,21 +314,33 @@ def test_one_provider_per_wire_face_not_per_route(tmp_path):
     assert sorted((r['logical_model'], r['rank']) for r in out['routes']) == [('alpha', 0), ('alpha', 1), ('beta', 0)]
 
 
-def test_a_differing_default_effort_keeps_routes_on_separate_faces(tmp_path):
-    """dsh hangs `reasoning` on the PROVIDER while MMS declares it per model.
+def test_models_wanting_different_efforts_share_one_channel(tmp_path):
+    """The approved default rides on the model, so one channel holds them all.
 
-    Folding two defaults together would quietly send `high` for a model whose
-    approved default is `max` — the one thing the effort contract forbids.
+    Splitting by level is what made `newapi-tokyo` appear three times in the
+    settings page with the same endpoint and key in each. The contract that
+    forbids sending `high` for a model whose approved default is `max` is kept
+    by the per-model field, not by the split.
     """
     data = many_routes({
         'alpha': [('tokyo', 'alpha-wire', 'high')],
         'beta': [('tokyo', 'beta-wire', 'max')],
     })
     out = faces_of(tmp_path, data)
-    assert len(out['providers']) == 2
-    assert sorted(v.get('reasoning') for v in out['providers'].values()) == ['high', 'max']
-    # Same channel twice, so the names have to say which is which.
-    assert sorted(v['displayName'] for v in out['providers'].values()) == ['tokyo · high', 'tokyo · max']
+    assert len(out['providers']) == 1
+    face = next(iter(out['providers'].values()))
+    # One channel, one key, one endpoint, and the level on each model.
+    assert face['displayName'] == 'tokyo'
+    assert 'reasoning' not in face
+    assert {m['id']: m.get('reasoning') for m in face['models']} \
+        == {'alpha-wire': 'high', 'beta-wire': 'max'}
+    # The settings page reads these off the route table, not off the provider
+    # card, so the number and the default have to travel with the route.
+    by_wire = {r['model']: r for r in out['routes']}
+    assert by_wire['alpha-wire']['default_reasoning'] == 'high'
+    assert by_wire['beta-wire']['default_reasoning'] == 'max'
+    assert by_wire['alpha-wire']['context_window'] == 200000
+    assert by_wire['alpha-wire']['max_output'] == 16000
 
 
 def test_two_models_sharing_one_wire_id_on_a_face_are_refused(tmp_path):

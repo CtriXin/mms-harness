@@ -101,19 +101,11 @@ def convert_bundle(bundle):
                 # One explicit route per logical model and source: no ambiguous
                 # same-wire-id overwrite, no native pi-ai provider fallback.
                 # One dsh provider per WIRE FACE, not per route: a face is an
-                # endpoint, a protocol, a key and one default reasoning level,
-                # and every model reachable through it belongs in its `models`.
-                # Splitting by route instead put the same key and endpoint into
-                # sixty-eight entries that differed only by which single model
-                # each held — a settings page nobody could work with, and a key
-                # rotation that had to be typed twenty times.
-                #
-                # `reasoning` is where the grouping stops. dsh hangs it on the
-                # PROVIDER (`PiAiProviderConfig.reasoning`), while MMS declares
-                # it per model, and a switch that sends no effort inherits it —
-                # so folding two different defaults together would quietly send
-                # `high` for a model whose approved default is `max`. The key
-                # carries it, and those routes stay separate faces.
+                # endpoint, a protocol and a key, and every model reachable
+                # through it belongs in its `models`. The approved default
+                # effort rides on each model, so two models that want different
+                # defaults still share the face. A second wire protocol is a
+                # different face, because dsh hangs `api` on the provider.
                 caps = resolve_model_capabilities(logical, provider_id=provider, base_url=endpoint, protocol=protocol,
                     approved_facts=p['capabilities'], model_policy=p['policy'], provider_profiles=p['profile'])
                 # MMS ships non-secret capability defaults in its versioned profile
@@ -150,9 +142,17 @@ def convert_bundle(bundle):
                     'input': ['text', 'image'] if caps.get('supports_vision') else ['text'],
                     'reasoningEfforts': efforts or False}
                 default_effort = preference if preference in efforts and preference != 'off' else None
+                # The approved default rides on the model, where MMS declares
+                # it. It used to be part of the face because dsh could only
+                # hang a default on the provider, which split one channel into
+                # one entry per level: `newapi-tokyo` appeared three times in
+                # the settings page and a key rotation had to be typed into
+                # each. The model field removes the only reason to split.
+                if default_effort is not None:
+                    model['reasoning'] = default_effort
                 # See the note above: everything in this key changes what the
                 # wire does, so two routes that agree on all of it are one face.
-                face = (provider, endpoint, protocol, default_effort)
+                face = (provider, endpoint, protocol)
                 digest = hashlib.sha256('\0'.join(str(part) for part in face).encode()).hexdigest()[:12]
                 route_id = 'mms-' + digest
                 reference = 'MMS_DSH_' + digest.upper()
@@ -163,8 +163,6 @@ def convert_bundle(bundle):
                         'retryPolicy': {'mode': 'normal', 'maxRetries': 1}}
                     if protocol == 'openai_chat_completions':
                         item['compat'] = {'supportsDeveloperRole': False}
-                    if default_effort is not None:
-                        item['reasoning'] = default_effort
                     providers[route_id] = item
                     faces[route_id] = face
                 # dsh keys a face's models by wire id; two logical models sharing
@@ -176,10 +174,14 @@ def convert_bundle(bundle):
                 else:
                     item['models'].append(model)
                 credentials[reference] = route['api_key']
-                routes.append({'logical_model': logical, 'provider_id': provider, 'provider': route_id,
+                route_row = {'logical_model': logical, 'provider_id': provider, 'provider': route_id,
                     'model': route['model_id'], 'rank': rank, 'protocol': protocol, 'base_url': endpoint,
                     'fallback_reason': fallback_reason, 'credential_ref': reference,
-                    'capability_sources': caps['sources'], 'input': model['input'], 'reasoning_efforts': list(efforts)})
+                    'capability_sources': caps['sources'], 'input': model['input'], 'reasoning_efforts': list(efforts),
+                    'context_window': context, 'max_output': caps['max_output_tokens']}
+                if default_effort is not None:
+                    route_row['default_reasoning'] = default_effort
+                routes.append(route_row)
             except ValueError as exc:
                 excluded.append({'model': logical, 'provider': provider, 'rank': rank, 'reason': str(exc)})
     if not providers:
@@ -195,10 +197,10 @@ def convert_bundle(bundle):
 def name_faces(providers, faces):
     """Give every face a name the operator can tell apart, in place.
 
-    A channel usually has one face and is simply named after itself. When it
-    has several — a second protocol, or a second default reasoning level —
-    the name says which, because "newapi-tokyo" three times over is worse than
-    the per-route names this grouping replaced.
+    A channel usually has one face and is simply named after itself. Only a
+    second wire protocol splits it now, and then the name says which one,
+    because "newapi-tokyo" twice over says nothing. Reasoning level no longer
+    appears here: it rides on each model, so one channel holds them all.
     """
     by_channel = {}
     for route_id in providers:
@@ -206,14 +208,8 @@ def name_faces(providers, faces):
     for members in by_channel.values():
         if len(members) == 1:
             continue
-        protocols = {faces[route_id][2] for route_id in members}
-        efforts = {faces[route_id][3] for route_id in members}
         for route_id in members:
-            _, _, protocol, effort = faces[route_id]
-            parts = ([PROTOCOLS[protocol]] if len(protocols) > 1 else []) \
-                + ([effort or '无推理'] if len(efforts) > 1 else [])
-            if parts:
-                providers[route_id]['displayName'] += ' · ' + ' · '.join(parts)
+            providers[route_id]['displayName'] += ' · ' + PROTOCOLS[faces[route_id][2]]
 
 
 def read_config(root):
@@ -334,7 +330,12 @@ def configure(root: Path, instance: Path, default_model='deepseek-v4-flash', plu
     private_json(instance / 'routes.json', metadata)
     default = {'provider': choice['provider'], 'model': choice['model']}
     selection = dict(default)
-    preference = data['providers'][choice['provider']].get('reasoning')
+    # The approved default now rides on the model, not on the channel, so the
+    # seeded selection has to read it there. Taking the channel's would leave a
+    # new session at whatever level the channel happened to carry — and since
+    # the channel no longer carries one at all, at no level.
+    face = data['providers'][choice['provider']]['models']
+    preference = next((m.get('reasoning') for m in face if m['id'] == choice['model']), None)
     if preference:
         selection['reasoningEffort'] = preference
     seed_default_selection(dsh_home / 'settings.yaml', selection, data['providers'], data['routes'])
