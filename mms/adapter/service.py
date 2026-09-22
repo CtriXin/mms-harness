@@ -176,6 +176,85 @@ def remote_command(root, config, args, dsh_url):
         print('  MMS Harness 未运行；启动后网关自动开启。')
 
 
+
+def normalize_session_id(value):
+    """Accept bare uuid or session-<uuid>; reject empty/path-like input."""
+    raw = (value or '').strip()
+    if not raw or '/' in raw or '\\' in raw or '..' in raw:
+        raise SystemExit('请提供 sessionId，例如 session-06415745-1fa0-4848-b636-e21b027a0490')
+    if raw.startswith('session-'):
+        return raw
+    if re.fullmatch(r'[0-9a-fA-F-]{36}', raw):
+        return 'session-' + raw
+    if re.fullmatch(r'session-[0-9a-fA-F-]{36}', raw):
+        return raw
+    # Allow already-prefixed non-uuid ids that DSH uses in tests.
+    if re.fullmatch(r'[A-Za-z0-9._:-]+', raw):
+        return raw if raw.startswith('session-') else raw
+    raise SystemExit('sessionId 格式无效：' + raw)
+
+
+def session_title(instance, session_id):
+    cache = Path(instance) / 'home' / 'storages' / 'session_projcache' / 'sessions' / (session_id + '.json')
+    if not cache.is_file():
+        return None
+    try:
+        data = json.loads(cache.read_text())
+        title = (((data.get('record') or {}).get('rows') or {}).get('title') or {}).get('val')
+        return title if isinstance(title, str) and title.strip() else None
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+
+
+def locate_session(instance, session_id):
+    """Return (path, title) for a session under instance/home/sessions, or raise."""
+    root = Path(instance) / 'home' / 'sessions'
+    if not root.is_dir():
+        raise SystemExit('未找到 sessions 目录：' + str(root))
+    matches = sorted({p.resolve() for p in root.rglob(session_id) if p.is_dir() and p.name == session_id})
+    if not matches:
+        # Prefix / substring search for operator typos (exact dir name still preferred).
+        soft = sorted({p.resolve() for p in root.rglob('session-*') if p.is_dir() and session_id in p.name})
+        if len(soft) == 1:
+            matches = soft
+        elif soft:
+            preview = ', '.join(p.name for p in soft[:8])
+            raise SystemExit(f'找到多个可能的会话（{len(soft)}）：{preview}')
+        else:
+            raise SystemExit(f'未找到会话 {session_id}（在 {root}）')
+    if len(matches) > 1:
+        preview = ', '.join(str(p) for p in matches[:5])
+        raise SystemExit(f'找到多个同名会话目录：{preview}')
+    path = matches[0]
+    return path, session_title(instance, path.name)
+
+
+def with_session_query(url, session_id):
+    """Attach ?session= / &session= without dropping the auth token."""
+    if not url or not session_id:
+        return url
+    # Prefer query param (UI deep link). Keep existing token query intact.
+    if 'session=' in url.split('#', 1)[0]:
+        # Replace existing session= value in query.
+        base, frag = (url.split('#', 1) + [''])[:2]
+        if '?' in base:
+            path, query = base.split('?', 1)
+            parts = []
+            for item in query.split('&'):
+                if item.startswith('session=') or item.startswith('sessionId='):
+                    continue
+                if item:
+                    parts.append(item)
+            parts.append('session=' + session_id)
+            out = path + '?' + '&'.join(parts)
+        else:
+            out = base + '?session=' + session_id
+        return out + (('#' + frag) if frag else '')
+    if '?' in url:
+        return url + '&session=' + session_id
+    return url + '?session=' + session_id
+
+
 def main():
     # upgrade / rollback run as their own program: they stop and restart this service.
     # The launcher puts `--installation ROOT` before the user's arguments.
@@ -184,11 +263,25 @@ def main():
         rest=[a for a in argv if a!=positional[0]]+(['--rollback'] if positional[0]=='rollback' else [])
         os.execv(sys.executable,[sys.executable,str(Path(__file__).with_name('upgrade.py')),*rest])
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=['start','stop','status','open','remote'],nargs='?',default='open')
-    parser.add_argument('remote_action',nargs='?',choices=['status','on','tunnel','off','rotate','add-host','remove-host'],default='status')
-    parser.add_argument('value',nargs='?')
+    parser.add_argument('action',choices=['start','stop','status','open','remote','find'],nargs='?',default='open')
+    # Second positional is overloaded: remote subcommand OR find sessionId.
+    # Choices are enforced below so `find <sessionId>` is not rejected by argparse.
+    parser.add_argument('remote_action',nargs='?',default='status')
+    parser.add_argument('value',nargs='?',help='for remote add/remove-host: hostname')
+    parser.add_argument('--session',dest='session_id',help='open/find: focus this sessionId in the web UI')
     parser.add_argument('--installation',type=Path,required=True)
+    parser.add_argument('--no-open',action='store_true',help='print URL/path only; do not launch a browser')
     args=parser.parse_args()
+    # `mms-harness find <id>` and `mms-harness open --session <id>` share one path.
+    if args.action=='find':
+        args.session_id=args.session_id or (None if args.remote_action=='status' else args.remote_action) or args.value
+        if not args.session_id:
+            raise SystemExit('用法：mms-harness find <sessionId>  或  mms-harness open --session <sessionId>')
+        args.action='open'
+    elif args.action=='remote':
+        allowed={'status','on','tunnel','off','rotate','add-host','remove-host'}
+        if args.remote_action not in allowed:
+            raise SystemExit('remote 子命令：'+', '.join(sorted(allowed)))
     root=args.installation.resolve();config=json.loads((root/'installation.json').read_text())
     log=root/'service.log';pidfile=root/'service.pid'
     with (root/'service.lock').open('w') as lock:
@@ -227,7 +320,16 @@ def main():
                     with opener.open(url,timeout=1) as response:
                         if response.status==200:
                             if started or not gateway_running(root):start_gateway(root,config,url)
-                            if args.action=='open':webbrowser.open(url)
+                            focus=None
+                            if getattr(args,'session_id',None):
+                                focus=normalize_session_id(args.session_id)
+                                path,title=locate_session(config['instance'],focus)
+                                print(f'sessionId={focus}')
+                                if title:print(f'title={title}')
+                                print(f'path={path}')
+                                url=with_session_query(url,focus)
+                            if args.action=='open' and not getattr(args,'no_open',False):
+                                webbrowser.open(url)
                             print(url);return
                 except OSError:pass
             time.sleep(.1)
