@@ -97,6 +97,19 @@ class EncodeGifTest(unittest.TestCase):
         oversized = self.encode(None, '--force', '--max-bytes', '1', '--final-hold', '0.0')
         self.assertNotEqual(oversized.returncode, 0)
         self.assertIn('above --max-bytes', oversized.stderr)
+        self.assertEqual(self.output.read_bytes(), b'keep')
+        self.assertFalse(any(self.root.glob('.*.partial.gif')))
+
+    def test_rejected_first_encode_leaves_no_output(self):
+        missing = self.root / 'fresh.gif'
+        result = subprocess.run([
+            sys.executable, str(SCRIPT), str(self.video), str(missing),
+            '--max-bytes', '1', '--final-hold', '0.0',
+        ], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('above --max-bytes', result.stderr)
+        self.assertFalse(missing.exists())
+        self.assertFalse(any(self.root.glob('.*.partial.gif')))
 
 
 if __name__ == '__main__':
