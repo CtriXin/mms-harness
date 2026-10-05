@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import math
 import shutil
@@ -257,63 +258,77 @@ def main() -> None:
         details = {"sourceFrames": len(frames)}
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="record-browser-gif-") as temporary:
-        if is_video:
-            inputs = ["-i", str(source)]
-            timing = f"trim=start={start}:end={end},setpts=(PTS-STARTPTS)/{speed},"
-            hold = f",tpad=stop_mode=clone:stop_duration={final_hold}"
-        else:
-            manifest = Path(temporary) / "frames.ffconcat"
-            write_concat_manifest(manifest, frames, durations)
-            inputs = ["-f", "concat", "-safe", "0", "-i", str(manifest)]
-            timing = ""
-            hold = ""
-        scale = f"scale='min({args.max_width},iw)':-2:flags=lanczos"
-        palette = f"palettegen=max_colors={args.colors}:stats_mode=full"
-        filters = (
-            f"{timing}fps={args.fps},{scale}{hold},split[base][palette_input];"
-            f"[palette_input]{palette}[palette];"
-            "[base][palette]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle"
-        )
-        command = [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            *inputs,
-            "-vf",
-            filters,
-            "-loop",
-            "0",
-            "-t",
-            f"{expected_duration:.6f}",
-            "-y" if args.force else "-n",
-            str(output),
-        ]
-        try:
-            subprocess.run(command, check=True)
-        except subprocess.CalledProcessError as error:
-            fail(f"ffmpeg failed with exit code {error.returncode}")
-
-    stream = probe_stream(ffprobe, output)
-    width = stream_int(stream, "width", output)
-    height = stream_int(stream, "height", output)
-    encoded_frames = stream_int(stream, "nb_frames", output)
+    # Stage beside the final path so verification failure never replaces an
+    # existing GIF, and a rejected first encode leaves no leftover artifact.
+    staging_fd, staging_name = tempfile.mkstemp(
+        prefix=f".{output.stem}.",
+        suffix=".partial.gif",
+        dir=output.parent,
+    )
+    os.close(staging_fd)
+    staging = Path(staging_name)
     try:
-        actual_duration = float(stream["duration"])
-    except (KeyError, TypeError, ValueError):
-        fail(f"missing duration in media probe for {output}")
-    tolerance = max(0.2, 2 / args.fps)
-    if abs(actual_duration - expected_duration) > tolerance:
-        fail(f"expected about {expected_duration:.3f}s, encoded {actual_duration:.3f}s")
-    if width > args.max_width:
-        fail(f"expected width at most {args.max_width}, encoded {width}")
-    if encoded_frames < 2:
-        fail(f"expected an animated GIF, encoded {encoded_frames} frame")
+        with tempfile.TemporaryDirectory(prefix="record-browser-gif-") as temporary:
+            if is_video:
+                inputs = ["-i", str(source)]
+                timing = f"trim=start={start}:end={end},setpts=(PTS-STARTPTS)/{speed},"
+                hold = f",tpad=stop_mode=clone:stop_duration={final_hold}"
+            else:
+                manifest = Path(temporary) / "frames.ffconcat"
+                write_concat_manifest(manifest, frames, durations)
+                inputs = ["-f", "concat", "-safe", "0", "-i", str(manifest)]
+                timing = ""
+                hold = ""
+            scale = f"scale='min({args.max_width},iw)':-2:flags=lanczos"
+            palette = f"palettegen=max_colors={args.colors}:stats_mode=full"
+            filters = (
+                f"{timing}fps={args.fps},{scale}{hold},split[base][palette_input];"
+                f"[palette_input]{palette}[palette];"
+                "[base][palette]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle"
+            )
+            command = [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                *inputs,
+                "-vf",
+                filters,
+                "-loop",
+                "0",
+                "-t",
+                f"{expected_duration:.6f}",
+                "-y",
+                str(staging),
+            ]
+            try:
+                subprocess.run(command, check=True)
+            except subprocess.CalledProcessError as error:
+                fail(f"ffmpeg failed with exit code {error.returncode}")
 
-    byte_size = output.stat().st_size
-    if byte_size > args.max_bytes:
-        fail(f"output is {byte_size} bytes, above --max-bytes {args.max_bytes}")
+        stream = probe_stream(ffprobe, staging)
+        width = stream_int(stream, "width", staging)
+        height = stream_int(stream, "height", staging)
+        encoded_frames = stream_int(stream, "nb_frames", staging)
+        try:
+            actual_duration = float(stream["duration"])
+        except (KeyError, TypeError, ValueError):
+            fail(f"missing duration in media probe for {staging}")
+        tolerance = max(0.2, 2 / args.fps)
+        if abs(actual_duration - expected_duration) > tolerance:
+            fail(f"expected about {expected_duration:.3f}s, encoded {actual_duration:.3f}s")
+        if width > args.max_width:
+            fail(f"expected width at most {args.max_width}, encoded {width}")
+        if encoded_frames < 2:
+            fail(f"expected an animated GIF, encoded {encoded_frames} frame")
+
+        byte_size = staging.stat().st_size
+        if byte_size > args.max_bytes:
+            fail(f"output is {byte_size} bytes, above --max-bytes {args.max_bytes}")
+
+        os.replace(staging, output)
+    finally:
+        staging.unlink(missing_ok=True)
 
     print(
         json.dumps(

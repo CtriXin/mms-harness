@@ -55,16 +55,15 @@ const context = await browser.newContext({
   viewport: size,
   recordVideo: { dir: join(runDir, 'videos'), size },
 })
+const page = await context.newPage()
+const video = page.video()
 try {
-  const page = await context.newPage()
-  const video = page.video()
   // Navigate and exercise the real application here.
-  await context.close()
-  await video.saveAs(join(runDir, 'demo.webm'))
 } finally {
   await context.close()
-  await browser.close()
 }
+await video.saveAs(join(runDir, 'demo.webm'))
+await browser.close()
 ```
 
 Import `createRequire` from `node:module` and `join` from `node:path`; set `repo` and a fresh `runDir` to absolute paths in the recording script. Retain the page's video handle before closing it. Await `context.close()` before `video.saveAs()` or encoding; closing only the browser does not guarantee the video's flush. Each page has its own video: choose the demonstrated page explicitly and do not concatenate unrelated pages or runs. Failed runs are diagnostic only.
@@ -90,7 +89,7 @@ python3 "$GIF_SKILL_DIR/scripts/encode_gif.py" \
 
 `--start` and `--end` select one continuous source interval in seconds. Defaults retain the full video at 1× speed and add a two-second final hold. `--speed` changes playback speed; disclose it and the selected interval beside the GIF so the demo cannot imply measured response latency. Use observed video times, not guessed wall-clock offsets, and preserve the complete cause and outcome of the demonstrated behavior. The final hold repeats the last selected frame. `--fps` sets the encoded GIF frame rate; increasing it cannot recover motion that the source recording did not capture. Keep the original WebM for QA; do not splice separate runs or synthesize missing states.
 
-The encoder probes WebM container duration, applies trim and speed before palette conversion, and checks encoded duration, animation, width, and byte size. It refuses an empty or out-of-range interval, a selection shorter than two output frames, mode-inappropriate flags, and accidental overwrite. Reduce `--max-width`, then `--colors` or `--fps` for a large artifact; preserve readable text. Use `--force` only after resolving the exact output path.
+The encoder probes WebM container duration, applies trim and speed before palette conversion, and checks encoded duration, animation, width, and byte size against a same-directory staging file before replacing the output path. It refuses an empty or out-of-range interval, a selection shorter than two output frames, mode-inappropriate flags, and accidental overwrite; a rejected encode leaves any existing output untouched and does not leave a partial GIF behind. Reduce `--max-width`, then `--colors` or `--fps` for a large artifact; preserve readable text. Use `--force` only after resolving the exact output path.
 
 ### Screenshot capture
 
